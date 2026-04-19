@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -7,15 +7,22 @@ const MAP_HEIGHT = 520;
 function useApiData(path, defaultValue) {
   const [data, setData] = useState(defaultValue);
 
-  const refresh = async () => {
-    const response = await fetch(`${API_URL}${path}`);
-    const payload = await response.json();
-    setData(payload);
-  };
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}${path}`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      setData(payload);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [path]);
 
   useEffect(() => {
     refresh();
-  }, [path]);
+  }, [refresh]);
 
   return [data, refresh];
 }
@@ -74,6 +81,18 @@ function App() {
   });
   const [resourceDraft, setResourceDraft] = useState({ name: "", quantity: 0, notes: "" });
   const [diaryDraft, setDiaryDraft] = useState({ title: "", content: "" });
+  const [eventError, setEventError] = useState("");
+  const [resourceError, setResourceError] = useState("");
+  const [diaryError, setDiaryError] = useState("");
+
+  const readErrorMessage = async (response, fallbackText) => {
+    try {
+      const payload = await response.json();
+      return payload.detail ?? fallbackText;
+    } catch {
+      return fallbackText;
+    }
+  };
 
   const submitEvent = async (event) => {
     event.preventDefault();
@@ -83,9 +102,12 @@ function App() {
       body: JSON.stringify(eventDraft),
     });
     if (response.ok) {
+      setEventError("");
       setEventDraft({ title: "", description: "", event_type: "event", latitude: 50, longitude: 50 });
       refreshEvents();
+      return;
     }
+    setEventError(await readErrorMessage(response, "Could not create event."));
   };
 
   const deleteEvent = async (id) => {
@@ -101,9 +123,12 @@ function App() {
       body: JSON.stringify({ ...resourceDraft, quantity: Number(resourceDraft.quantity) }),
     });
     if (response.ok) {
+      setResourceError("");
       setResourceDraft({ name: "", quantity: 0, notes: "" });
       refreshResources();
+      return;
     }
+    setResourceError(await readErrorMessage(response, "Could not create resource."));
   };
 
   const submitDiary = async (event) => {
@@ -114,9 +139,12 @@ function App() {
       body: JSON.stringify(diaryDraft),
     });
     if (response.ok) {
+      setDiaryError("");
       setDiaryDraft({ title: "", content: "" });
       refreshDiaryEntries();
+      return;
     }
+    setDiaryError(await readErrorMessage(response, "Could not create diary entry."));
   };
 
   return (
@@ -206,6 +234,7 @@ function App() {
               />
               <button type="submit">Add marker</button>
             </form>
+            {eventError ? <p className="error">{eventError}</p> : null}
             <ul>
               {events.map((event) => (
                 <li key={event.id} className="row">
@@ -244,6 +273,7 @@ function App() {
               />
               <button type="submit">Add resource</button>
             </form>
+            {resourceError ? <p className="error">{resourceError}</p> : null}
           </article>
 
           <article className="card">
@@ -264,6 +294,7 @@ function App() {
               />
               <button type="submit">Add entry</button>
             </form>
+            {diaryError ? <p className="error">{diaryError}</p> : null}
           </article>
         </section>
       )}

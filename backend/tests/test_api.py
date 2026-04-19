@@ -34,3 +34,19 @@ def test_create_resource_duplicate_name_is_rejected():
 
     duplicate = client.post("/resources", json={"name": resource_name, "quantity": 80, "notes": "Extra"})
     assert duplicate.status_code == 400
+
+
+def test_update_resource_duplicate_name_is_rejected():
+    name_one = f"Resource-{uuid4()}"
+    name_two = f"Resource-{uuid4()}"
+
+    first = client.post("/resources", json={"name": name_one, "quantity": 10, "notes": ""})
+    second = client.post("/resources", json={"name": name_two, "quantity": 20, "notes": ""})
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    update = client.put(
+        f"/resources/{second.json()['id']}",
+        json={"name": name_one, "quantity": 30, "notes": "trying duplicate name"},
+    )
+    assert update.status_code == 400

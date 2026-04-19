@@ -127,6 +127,11 @@ p {
   margin: 0.3rem 0 0;
 }
 
+.error {
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 800px) {
   .grid {
     grid-template-columns: 1fr;

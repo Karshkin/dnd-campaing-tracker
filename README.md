@@ -1,4 +1,4 @@
-# dnd-campaing-tracker
+# dnd-campaign-tracker
 
 A minimal full-stack campaign tracker with:
 - **Python API** for map events, diary entries, and resources
@@ -9,7 +9,7 @@ A minimal full-stack campaign tracker with:
 ## Backend (FastAPI)
 
 ```bash
-cd /home/runner/work/dnd-campaing-tracker/dnd-campaing-tracker/backend
+cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -21,7 +21,7 @@ API base URL: `http://localhost:8000`
 ## Frontend (React + Vite)
 
 ```bash
-cd /home/runner/work/dnd-campaing-tracker/dnd-campaing-tracker/frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -37,6 +37,6 @@ VITE_API_URL="http://localhost:8000" npm run dev
 ## Tests
 
 ```bash
-cd /home/runner/work/dnd-campaing-tracker/dnd-campaing-tracker/backend
+cd backend
 python -m pytest
 ```
