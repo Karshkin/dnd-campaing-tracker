@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      # Persist uploads
+      - ./uploads:/app/uploads
+    environment:
+      # Override these in a .env file or pass them at runtime
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/campaign.db}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
