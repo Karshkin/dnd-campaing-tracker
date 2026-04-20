@@ -18,7 +18,7 @@ This guide covers deploying the DnD Campaign Tracker backend with Docker.
    ```env
    SECRET_KEY=your-generated-secret-key-here
    ACCESS_TOKEN_EXPIRE_MINUTES=480
-   ALLOWED_ORIGINS=https://your-frontend-domain.com,https://karshkin.github.io
+   ALLOWED_ORIGINS=https://your-frontend-domain.com
    DATABASE_URL=sqlite:///./data/campaign.db
    ```
 
