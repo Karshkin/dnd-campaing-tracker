@@ -79,6 +79,25 @@ By default the frontend calls `http://localhost:8000`. To change it:
 VITE_API_URL="http://localhost:8000" npm run dev
 ```
 
+## GitHub Pages Deployment
+
+The frontend is deployed to GitHub Pages at:
+
+`https://karshkin.github.io/dnd-campaing-tracker/`
+
+The deployment workflow (`.github/workflows/deploy.yml`) builds only the React + Vite frontend from `frontend/` and publishes `frontend/dist`.
+
+> Note: The FastAPI backend is not deployed to GitHub Pages. If you deploy the backend separately, set `VITE_API_URL` to your backend URL.
+
+If Pages is not enabled yet in your repository:
+
+1. Go to **Settings** → **Pages**
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**
+3. Select branch **`gh-pages`** and folder **`/ (root)`**
+4. Save
+
+After pushing to `main`, GitHub Actions will deploy the latest frontend build automatically.
+
 ## Authentication Setup
 
 The application supports two types of users:
