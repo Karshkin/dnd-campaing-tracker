@@ -34,7 +34,34 @@ A comprehensive D&D campaign management system with:
 
 ## Backend (FastAPI)
 
-### Unix/Mac
+### Quick Start with Docker (Recommended)
+
+The easiest way to run the backend is with Docker:
+
+```bash
+cd backend
+./deploy.sh
+```
+
+This will automatically:
+- Create a `.env` file with a generated secret key
+- Build the Docker image
+- Start the backend with persistent database and uploads
+
+Then create an admin user:
+```bash
+docker-compose exec backend python create_admin.py
+```
+
+**API URLs:**
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+See [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md) for detailed deployment instructions including Render, Railway, Fly.io, and more.
+
+### Manual Setup (Development)
+
+#### Unix/Mac
 ```bash
 cd backend
 python -m venv .venv
@@ -43,7 +70,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### Windows (Git Bash)
+#### Windows (Git Bash)
 ```bash
 cd backend
 python -m venv .venv
@@ -52,7 +79,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### Windows (PowerShell)
+#### Windows (PowerShell)
 ```powershell
 cd backend
 python -m venv .venv
@@ -87,7 +114,7 @@ The frontend can be deployed to GitHub Pages at:
 
 The deployment workflow (`.github/workflows/deploy.yml`) automatically builds the React + Vite frontend from `frontend/` and publishes to GitHub Pages.
 
-> **Important Note**: The FastAPI backend is not deployed to GitHub Pages (only static frontend). The app will run in frontend-only mode on Pages. To use the full features with backend API, you need to deploy the backend separately and configure `VITE_API_URL`.
+> **Backend Deployment**: The FastAPI backend needs to be deployed separately. See [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md) for instructions on deploying to Render, Railway, Fly.io, or any platform with Docker support. Once deployed, configure `VITE_API_URL` in your GitHub Actions workflow to point to your backend.
 
 ### Enabling GitHub Pages
 
@@ -123,23 +150,28 @@ Only users with admin privileges can access this panel. There is no visible butt
 
 Before using the application, create an admin user:
 
-### Option 1: Using the create_admin.py script
+#### Option 1: Using the create_admin.py script (Recommended)
 
-#### Unix/Mac
+**With Docker:**
+```bash
+docker-compose exec backend python create_admin.py
+```
+
+**Without Docker (Unix/Mac):**
 ```bash
 cd backend
 source .venv/bin/activate
 python create_admin.py
 ```
 
-#### Windows (Git Bash)
+**Without Docker (Windows Git Bash):**
 ```bash
 cd backend
 source .venv/Scripts/activate
 python create_admin.py
 ```
 
-#### Windows (PowerShell)
+**Without Docker (Windows PowerShell):**
 ```powershell
 cd backend
 .venv\Scripts\Activate.ps1
