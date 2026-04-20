@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d8e2f2"/>
+      <stop offset="100%" stop-color="#a3b4cc"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#bg)"/>
+  <path d="M40 630 C220 560 350 560 520 620 C740 700 940 640 1160 610 L1160 720 L40 720 Z" fill="#85945d"/>
+  <path d="M120 340 C220 270 330 290 420 360 C560 470 700 480 840 420 C920 390 1030 390 1120 440" fill="none" stroke="#556b46" stroke-width="30" stroke-linecap="round"/>
+  <path d="M120 160 C240 80 430 90 560 180 C700 280 840 260 980 180" fill="none" stroke="#6e7f99" stroke-width="25" stroke-linecap="round"/>
+  <circle cx="250" cy="500" r="80" fill="#9ab0cf" opacity="0.6"/>
+  <circle cx="820" cy="540" r="70" fill="#9ab0cf" opacity="0.5"/>
+  <text x="34" y="60" font-family="Verdana" font-size="36" fill="#253248">Campaign Map</text>
+</svg>
