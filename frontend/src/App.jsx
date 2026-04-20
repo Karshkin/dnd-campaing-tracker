@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from 'react-i18next';
+import i18n from './i18n';
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -80,6 +82,7 @@ function useAuthenticatedApiData(path, defaultValue, isAuthenticated) {
 
 // ===== MAP COMPONENT =====
 function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tempMarker = null }) {
+  const { t } = useTranslation();
   const containerRef = useRef(null);
   const innerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -248,8 +251,8 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tem
         </div>
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.5rem" }}>
-        <small style={{ color: "#5d3a1a" }}>🔵 Events • 🟠 Quests • 🟢 Locations • 🟡 Cities • 🟣 Dungeons • 🔷 Landmarks</small>
-        <button type="button" onClick={resetView} style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}>⟳ Reset View</button>
+        <small style={{ color: "#5d3a1a" }}>{t('tracker.legend')}</small>
+        <button type="button" onClick={resetView} style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}>{t('tracker.resetView')}</button>
       </div>
     </div>
   );
@@ -264,6 +267,8 @@ function App() {
   };
 
   const [activeView, setActiveView] = useState(parsePath);
+  const { t } = useTranslation();
+  const [lang, setLang] = useState(i18n.language);
 
   useEffect(() => {
     const handlePop = () => setActiveView(parsePath());
@@ -410,12 +415,12 @@ function App() {
         setLoginData({ username: "", password: "" });
         navigate("tracker");
       } else {
-        setLoginError("Failed to fetch user information");
+        setLoginError(t('auth.fetchUserError'));
         clearAuthToken();
       }
       return;
     }
-    setLoginError(await readErrorMessage(response, "Login failed"));
+    setLoginError(await readErrorMessage(response, t('auth.loginFailed')));
   };
 
   // Auth: Register
@@ -424,12 +429,12 @@ function App() {
     setRegisterError("");
 
     if (registerData.password !== registerData.confirmPassword) {
-      setRegisterError("Passwords do not match");
+      setRegisterError(t('auth.passwordMismatch'));
       return;
     }
 
     if (registerData.password.length < 8) {
-      setRegisterError("Password must be at least 8 characters");
+      setRegisterError(t('auth.passwordTooShort'));
       return;
     }
 
@@ -446,7 +451,7 @@ function App() {
       navigate("login");
       return;
     }
-    setRegisterError(await readErrorMessage(response, "Registration failed"));
+    setRegisterError(await readErrorMessage(response, t('auth.registrationFailed')));
   };
 
   // Auth: Logout
@@ -479,10 +484,10 @@ function App() {
     }
     if (response.status === 401 || response.status === 403) {
       logout();
-      setEventError("Session expired. Please login again.");
+      setEventError(t('auth.sessionExpired'));
       return;
     }
-    setEventError(await readErrorMessage(response, "Could not create event."));
+    setEventError(await readErrorMessage(response, t('admin.createEventError')));
   };
 
   // Admin: Load events for a specific map
@@ -537,10 +542,10 @@ function App() {
     }
     if (response.status === 401 || response.status === 403) {
       logout();
-      setResourceError("Session expired. Please login again.");
+      setResourceError(t('auth.sessionExpired'));
       return;
     }
-    setResourceError(await readErrorMessage(response, "Could not create resource."));
+    setResourceError(await readErrorMessage(response, t('resources.createError')));
   };
 
   // Diary: Submit Diary Entry
@@ -574,10 +579,10 @@ function App() {
     }
     if (response.status === 401 || response.status === 403) {
       logout();
-      setDiaryError("Session expired. Please login again.");
+      setDiaryError(t('auth.sessionExpired'));
       return;
     }
-    setDiaryError(await readErrorMessage(response, "Could not create diary entry."));
+    setDiaryError(await readErrorMessage(response, t('diary.createError')));
   };
 
   // Characters: Submit Character
@@ -609,7 +614,7 @@ function App() {
       refreshCharacters();
       return;
     }
-    setCharacterError(await readErrorMessage(response, "Could not create character."));
+    setCharacterError(await readErrorMessage(response, t('characters.createError')));
   };
 
   const uploadCharacterImage = async (characterId, file) => {
@@ -640,15 +645,15 @@ function App() {
 
     if (response.ok) {
       refreshCharacters();
-      alert("Character sheet uploaded!");
+      alert(t('characters.sheetUploaded'));
     } else {
-      alert("Failed to upload character sheet");
+      alert(t('characters.sheetUploadFailed'));
     }
   };
 
   // Characters: Delete Character
   const deleteCharacter = async (id) => {
-    if (!confirm("Delete this character?")) return;
+    if (!confirm(t('characters.deleteConfirm'))) return;
     const token = getAuthToken();
     await fetch(`${API_URL}/characters/${id}`, {
       method: "DELETE",
@@ -1182,45 +1187,53 @@ function App() {
   return (
     <main>
       <header>
-        <h1>Campaign Chronicle<span>Tome of Adventures</span></h1>
+        <h1>{t('app.title')}<span>{t('app.subtitle')}</span></h1>
         <div className="tabs">
+          <button
+            type="button"
+            onClick={() => { const next = lang.startsWith('es') ? 'en' : 'es'; i18n.changeLanguage(next); setLang(next); }}
+            title={lang.startsWith('es') ? 'Switch to English' : 'Cambiar a Español'}
+            style={{ fontSize: '1.1rem', padding: '0.35rem 0.6rem', minWidth: 'unset' }}
+          >
+            {lang.startsWith('es') ? '🇬🇧' : '🇪🇸'}
+          </button>
           <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
-            📜 Chronicle
+            {t('nav.chronicle')}
           </button>
           {isAuthenticated && (
             <>
               <button type="button" onClick={() => navigate("characters")} className={activeView === "characters" ? "active" : ""}>
-                🗡️ Characters
+                {t('nav.characters')}
               </button>
               <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" ? "active" : ""}>
-                🐉 Bestiary
+                {t('nav.bestiary')}
               </button>
-              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>🏰 Organizations</button>
+              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
               <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
-                👤 NPCs
+                {t('nav.npcs')}
               </button>
             </>
           )}
           {!isAuthenticated && (
             <>
               <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" ? "active" : ""}>
-                🐉 Bestiary
+                {t('nav.bestiary')}
               </button>
-              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>🏰 Organizations</button>
+              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
               <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
-                👤 NPCs
+                {t('nav.npcs')}
               </button>
               <button type="button" onClick={() => navigate("login")} className={activeView === "login" ? "active" : ""}>
-                🔓 Login
+                {t('nav.login')}
               </button>
               <button type="button" onClick={() => navigate("register")} className={activeView === "register" ? "active" : ""}>
-                📝 Register
+                {t('nav.register')}
               </button>
             </>
           )}
           {isAuthenticated && (
             <button type="button" onClick={logout}>
-              🚪 Logout
+              {t('nav.logout')}
             </button>
           )}
         </div>
@@ -1230,29 +1243,29 @@ function App() {
       {activeView === "login" && !isAuthenticated ? (
         <section className="grid">
           <article className="card">
-            <h2>Login</h2>
+            <h2>{t('auth.login')}</h2>
             <form onSubmit={login} className="form">
               <input
                 value={loginData.username}
                 onChange={(event) => setLoginData((old) => ({ ...old, username: event.target.value }))}
-                placeholder="Username"
+                placeholder={t('auth.username')}
                 required
               />
               <input
                 type="password"
                 value={loginData.password}
                 onChange={(event) => setLoginData((old) => ({ ...old, password: event.target.value }))}
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 required
               />
-              <button type="submit">Login</button>
+              <button type="submit">{t('auth.login')}</button>
             </form>
             {loginError ? <p className="error">{loginError}</p> : null}
             <p>
               <small>
-                Don't have an account?{" "}
+                {t('auth.noAccount')}{" "}
                 <button type="button" onClick={() => navigate("register")} style={{ background: "none", border: "none", color: "#8b4513", textDecoration: "underline", cursor: "pointer" }}>
-                  Register here
+                  {t('auth.registerHere')}
                 </button>
               </small>
             </p>
@@ -1264,12 +1277,12 @@ function App() {
       {activeView === "register" && !isAuthenticated ? (
         <section className="grid">
           <article className="card">
-            <h2>Register</h2>
+            <h2>{t('auth.register')}</h2>
             <form onSubmit={register} className="form">
               <input
                 value={registerData.username}
                 onChange={(event) => setRegisterData((old) => ({ ...old, username: event.target.value }))}
-                placeholder="Username (min 3 characters)"
+                placeholder={t('auth.usernamePlaceholder')}
                 minLength={3}
                 required
               />
@@ -1277,7 +1290,7 @@ function App() {
                 type="password"
                 value={registerData.password}
                 onChange={(event) => setRegisterData((old) => ({ ...old, password: event.target.value }))}
-                placeholder="Password (min 8 characters)"
+                placeholder={t('auth.passwordPlaceholder')}
                 minLength={8}
                 required
               />
@@ -1285,17 +1298,17 @@ function App() {
                 type="password"
                 value={registerData.confirmPassword}
                 onChange={(event) => setRegisterData((old) => ({ ...old, confirmPassword: event.target.value }))}
-                placeholder="Confirm Password"
+                placeholder={t('auth.confirmPassword')}
                 required
               />
-              <button type="submit">Register</button>
+              <button type="submit">{t('auth.register')}</button>
             </form>
             {registerError ? <p className="error">{registerError}</p> : null}
             <p>
               <small>
-                Already have an account?{" "}
+                {t('auth.hasAccount')}{" "}
                 <button type="button" onClick={() => navigate("login")} style={{ background: "none", border: "none", color: "#8b4513", textDecoration: "underline", cursor: "pointer" }}>
-                  Login here
+                  {t('auth.loginHere')}
                 </button>
               </small>
             </p>
@@ -1309,7 +1322,7 @@ function App() {
           <article className="card wide">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
               <h2 style={{ margin: 0 }}>
-                {trackerMap ? trackerMap.name : "World Map"}
+                {trackerMap ? trackerMap.name : t('tracker.worldMap')}
               </h2>
               {maps.length > 1 && (
                 <select
@@ -1328,7 +1341,7 @@ function App() {
                 </select>
               )}
             </div>
-            {isAuthenticated && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>Click the map to place a marker.</p>}
+            {isAuthenticated && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
             <MapView
               events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
               onMapClick={isAuthenticated ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
@@ -1338,77 +1351,77 @@ function App() {
 
             {isAuthenticated && trackerMarkerDraft && (
               <form onSubmit={submitTrackerMarker} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
-                <p style={{ margin: 0 }}><strong>📌 New Marker</strong> at {trackerMarkerDraft.latitude.toFixed(1)}%, {trackerMarkerDraft.longitude.toFixed(1)}%</p>
+                <p style={{ margin: 0 }}><strong>{t('tracker.newMarker')}</strong> {t('tracker.at')} {trackerMarkerDraft.latitude.toFixed(1)}%, {trackerMarkerDraft.longitude.toFixed(1)}%</p>
                 <input
                   value={trackerMarkerForm.title}
                   onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="Title"
+                  placeholder={t('common.title')}
                   required
                 />
                 <input
                   value={trackerMarkerForm.description}
                   onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Description (optional)"
+                  placeholder={t('common.descriptionOptional')}
                 />
                 <select value={trackerMarkerForm.kind} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, kind: e.target.value }))}>
-                  <option value="poi">Point of Interest</option>
-                  <option value="event">Event Marker</option>
+                  <option value="poi">{t('tracker.poi')}</option>
+                  <option value="event">{t('tracker.eventMarker')}</option>
                 </select>
                 {trackerMarkerForm.kind === "poi" ? (
                   <select value={trackerMarkerForm.poi_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, poi_type: e.target.value }))}>
-                    <option value="location">Location</option>
-                    <option value="city">City</option>
-                    <option value="dungeon">Dungeon</option>
-                    <option value="landmark">Landmark</option>
-                    <option value="quest">Quest</option>
+                    <option value="location">{t('tracker.location')}</option>
+                    <option value="city">{t('tracker.city')}</option>
+                    <option value="dungeon">{t('tracker.dungeon')}</option>
+                    <option value="landmark">{t('tracker.landmark')}</option>
+                    <option value="quest">{t('tracker.quest')}</option>
                   </select>
                 ) : (
                   <select value={trackerMarkerForm.event_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, event_type: e.target.value }))}>
-                    <option value="event">Event</option>
-                    <option value="quest">Quest</option>
+                    <option value="event">{t('tracker.event')}</option>
+                    <option value="quest">{t('tracker.quest')}</option>
                   </select>
                 )}
-                <label style={{ fontSize: "0.9rem" }}>Image (optional):
+                <label style={{ fontSize: "0.9rem" }}>{t('common.imageOptional')}:
                   <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setTrackerMarkerImageFile(e.target.files[0] || null)} />
                 </label>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button type="submit">Add Marker</button>
-                  <button type="button" onClick={() => setTrackerMarkerDraft(null)}>Cancel</button>
+                  <button type="submit">{t('tracker.addMarker')}</button>
+                  <button type="button" onClick={() => setTrackerMarkerDraft(null)}>{t('common.cancel')}</button>
                 </div>
               </form>
             )}
 
             {isAuthenticated && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
               <details style={{ marginTop: "1rem" }}>
-                <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>Manage markers on this map</summary>
+                <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
                 <ul style={{ marginTop: "0.5rem" }}>
                   {trackerMapPOIs.map((poi) => (
                     <li key={`poi-${poi.id}`}>
                       {editingPoi?.id === poi.id ? (
                         <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                           <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder="Description" style={{ flex: "1 1 120px" }} />
+                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
                           <select value={editingPoi.poi_type} onChange={(e) => setEditingPoi((p) => ({ ...p, poi_type: e.target.value }))}>
-                            <option value="location">Location</option>
-                            <option value="city">City</option>
-                            <option value="dungeon">Dungeon</option>
-                            <option value="landmark">Landmark</option>
-                            <option value="quest">Quest</option>
+                            <option value="location">{t('tracker.location')}</option>
+                            <option value="city">{t('tracker.city')}</option>
+                            <option value="dungeon">{t('tracker.dungeon')}</option>
+                            <option value="landmark">{t('tracker.landmark')}</option>
+                            <option value="quest">{t('tracker.quest')}</option>
                           </select>
                           <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingPoi.image_path ? "Replace image" : "Add image"}
+                            🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
                           </label>
                           {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
-                          <button type="submit">Save</button>
-                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>Cancel</button>
+                          <button type="submit">{t('common.save')}</button>
+                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
                         </form>
                       ) : (
                         <div className="row">
                           <span><strong>{poi.title}</strong> ({poi.poi_type}){poi.description && ` — ${poi.description}`}</span>
                           <div style={{ display: "flex", gap: "0.25rem" }}>
-                            <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>Edit</button>
-                            <button type="button" onClick={() => deleteTrackerPOI(poi.id)}>Delete</button>
+                            <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>{t('common.edit')}</button>
+                            <button type="button" onClick={() => deleteTrackerPOI(poi.id)}>{t('common.delete')}</button>
                           </div>
                         </div>
                       )}
@@ -1419,25 +1432,25 @@ function App() {
                       {editingEvent?.id === ev.id ? (
                         <form onSubmit={updateEvent} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                           <input value={editingEvent.title} onChange={(e) => setEditingEvent((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingEvent.description} onChange={(e) => setEditingEvent((p) => ({ ...p, description: e.target.value }))} placeholder="Description" style={{ flex: "1 1 120px" }} />
+                          <input value={editingEvent.description} onChange={(e) => setEditingEvent((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
                           <select value={editingEvent.event_type} onChange={(e) => setEditingEvent((p) => ({ ...p, event_type: e.target.value }))}>
-                            <option value="event">Event</option>
-                            <option value="quest">Quest</option>
+                            <option value="event">{t('tracker.event')}</option>
+                            <option value="quest">{t('tracker.quest')}</option>
                           </select>
                           <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingEvent.image_path ? "Replace image" : "Add image"}
+                            🖼️ {editingEvent.image_path ? t('common.replaceImage') : t('common.addImage')}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingEventImageFile(e.target.files[0] || null)} />
                           </label>
                           {editingEventImageFile && <small style={{ color: "#5d3a1a" }}>{editingEventImageFile.name}</small>}
-                          <button type="submit">Save</button>
-                          <button type="button" onClick={() => { setEditingEvent(null); setEditingEventImageFile(null); }}>Cancel</button>
+                          <button type="submit">{t('common.save')}</button>
+                          <button type="button" onClick={() => { setEditingEvent(null); setEditingEventImageFile(null); }}>{t('common.cancel')}</button>
                         </form>
                       ) : (
                         <div className="row">
                           <span><strong>{ev.title}</strong> ({ev.event_type})</span>
                           <div style={{ display: "flex", gap: "0.25rem" }}>
-                            <button type="button" onClick={() => setEditingEvent({ id: ev.id, title: ev.title, description: ev.description, event_type: ev.event_type, latitude: ev.latitude, longitude: ev.longitude, map_id: ev.map_id, image_path: ev.image_path })}>Edit</button>
-                            <button type="button" onClick={() => deleteEvent(ev.id)}>Delete</button>
+                            <button type="button" onClick={() => setEditingEvent({ id: ev.id, title: ev.title, description: ev.description, event_type: ev.event_type, latitude: ev.latitude, longitude: ev.longitude, map_id: ev.map_id, image_path: ev.image_path })}>{t('common.edit')}</button>
+                            <button type="button" onClick={() => deleteEvent(ev.id)}>{t('common.delete')}</button>
                           </div>
                         </div>
                       )}
@@ -1449,13 +1462,13 @@ function App() {
           </article>
 
           <article className="card">
-            <h2>Party Resources</h2>
+            <h2>{t('resources.title')}</h2>
             {isAuthenticated && (
               <form onSubmit={submitResource} className="form" style={{ marginBottom: "1rem" }}>
                 <input
                   value={resourceDraft.name}
                   onChange={(e) => setResourceDraft((old) => ({ ...old, name: e.target.value }))}
-                  placeholder="Resource name"
+                  placeholder={t('resources.namePlaceholder')}
                   required
                 />
                 <input
@@ -1463,20 +1476,20 @@ function App() {
                   min="0"
                   value={resourceDraft.quantity}
                   onChange={(e) => setResourceDraft((old) => ({ ...old, quantity: e.target.value }))}
-                  placeholder="Quantity"
+                  placeholder={t('resources.quantity')}
                   required
                 />
                 <input
                   value={resourceDraft.notes}
                   onChange={(e) => setResourceDraft((old) => ({ ...old, notes: e.target.value }))}
-                  placeholder="Notes"
+                  placeholder={t('common.notes')}
                 />
                 <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                  🖼️ Image (optional)
+                  {t('common.imageOptionalLabel')}
                   <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setResourceImageFile(e.target.files[0] || null)} />
                 </label>
                 {resourceImageFile && <small style={{ color: "#5d3a1a" }}>{resourceImageFile.name}</small>}
-                <button type="submit">Add Resource</button>
+                <button type="submit">{t('resources.add')}</button>
                 {resourceError ? <p className="error">{resourceError}</p> : null}
               </form>
             )}
@@ -1489,22 +1502,22 @@ function App() {
                       alt={item.name}
                       onClick={() => setSelectedResourceImage(`${API_URL}/${item.image_path}`)}
                       style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513" }}
-                      title="Click to view"
+                      title={t('common.clickToView')}
                     />
                   ) : isAuthenticated ? (
-                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513", whiteSpace: "nowrap" }} title="Add image">
+                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513", whiteSpace: "nowrap" }} title={t('common.addImage')}>
                       🖼️
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   ) : null}
                   <span style={{ flexGrow: 1 }}><strong>{item.name}</strong>: {item.quantity}{item.notes ? ` (${item.notes})` : ""}</span>
                   {isAuthenticated && item.image_path && (
-                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513" }} title="Replace image">
+                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513" }} title={t('common.replaceImage')}>
                       🔄
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   )}
-                  {isAuthenticated && <button type="button" onClick={() => deleteResource(item.id)}>Delete</button>}
+                  {isAuthenticated && <button type="button" onClick={() => deleteResource(item.id)}>{t('common.delete')}</button>}
                 </li>
               ))}
             </ul>
@@ -1520,28 +1533,28 @@ function App() {
           )}
 
           <article className="card">
-            <h2>Adventure Diary</h2>
+            <h2>{t('diary.title')}</h2>
             {isAuthenticated && (
               <form onSubmit={submitDiary} className="form" style={{ marginBottom: "1rem" }}>
                 <input
                   value={diaryDraft.title}
                   onChange={(e) => setDiaryDraft((old) => ({ ...old, title: e.target.value }))}
-                  placeholder="Entry title"
+                  placeholder={t('diary.entryTitle')}
                   required
                 />
                 <textarea
                   value={diaryDraft.content}
                   onChange={(e) => setDiaryDraft((old) => ({ ...old, content: e.target.value }))}
-                  placeholder="What happened this session?"
+                  placeholder={t('diary.contentPlaceholder')}
                   rows={4}
                   required
                 />
                 <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                  🖼️ Image (optional)
+                  {t('common.imageOptionalLabel')}
                   <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setDiaryImageFile(e.target.files[0] || null)} />
                 </label>
                 {diaryImageFile && <small style={{ color: "#5d3a1a" }}>{diaryImageFile.name}</small>}
-                <button type="submit">Add Entry</button>
+                <button type="submit">{t('diary.add')}</button>
                 {diaryError ? <p className="error">{diaryError}</p> : null}
               </form>
             )}
@@ -1552,12 +1565,12 @@ function App() {
                     <strong>{entry.title}</strong>
                     <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
                       {isAuthenticated && (
-                        <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? "Replace image" : "Add image"}>
+                        <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
                           🖼️
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
                         </label>
                       )}
-                      {isAuthenticated && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>Delete</button>}
+                      {isAuthenticated && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
                     </div>
                   </div>
                   <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
@@ -1567,7 +1580,7 @@ function App() {
                       alt={entry.title}
                       onClick={() => setSelectedDiaryImage(`${API_URL}/${entry.image_path}`)}
                       style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain", borderRadius: "4px", cursor: "pointer", marginTop: "0.5rem", border: "1px solid #ddd" }}
-                      title="Click to view full size"
+                      title={t('common.clickToViewFull')}
                     />
                   )}
                 </li>
@@ -1587,20 +1600,20 @@ function App() {
       {activeView === "characters" && isAuthenticated ? (
         <section className="grid">
           <article className="card wide">
-            <h2>My Characters</h2>
+            <h2>{t('characters.title')}</h2>
             {!selectedCharacter ? (
               <>
                 <form onSubmit={submitCharacter} className="form">
                   <input
                     value={characterDraft.name}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, name: e.target.value }))}
-                    placeholder="Character Name"
+                    placeholder={t('characters.namePlaceholder')}
                     required
                   />
                   <input
                     value={characterDraft.character_class}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, character_class: e.target.value }))}
-                    placeholder="Class"
+                    placeholder={t('characters.class')}
                   />
                   <input
                     type="number"
@@ -1608,37 +1621,37 @@ function App() {
                     max="20"
                     value={characterDraft.level}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, level: Number(e.target.value) }))}
-                    placeholder="Level"
+                    placeholder={t('characters.level')}
                   />
                   <input
                     value={characterDraft.race}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, race: e.target.value }))}
-                    placeholder="Race"
+                    placeholder={t('characters.race')}
                   />
                   <textarea
                     value={characterDraft.notes}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, notes: e.target.value }))}
-                    placeholder="Notes"
+                    placeholder={t('common.notes')}
                     rows={3}
                   />
                   <select
                     value={characterDraft.organization_id ?? ""}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
                   >
-                    <option value="">No organization</option>
+                    <option value="">{t('characters.noOrg')}</option>
                     {organizations.map((org) => (
                       <option key={org.id} value={org.id}>{org.name}</option>
                     ))}
                   </select>
                   <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                    🖼️ {characterImageFile ? characterImageFile.name : "Add portrait (optional)"}
+                    🖼️ {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
                   </label>
-                  <button type="submit">Create Character</button>
+                  <button type="submit">{t('characters.create')}</button>
                 </form>
                 {characterError ? <p className="error">{characterError}</p> : null}
 
-                <h3>Your Characters</h3>
+                <h3>{t('characters.yourCharacters')}</h3>
                 <ul>
                   {characters.map((char) => (
                     <li key={char.id} className="row" style={{ alignItems: "center", gap: "0.75rem" }}>
@@ -1648,13 +1661,13 @@ function App() {
                           alt={char.name}
                           onClick={() => setSelectedCharacterImage(`${API_URL}/${char.image_path}`)}
                           style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
-                          title="Click to view"
+                          title={t('common.clickToView')}
                         />
                       ) : (
                         <span style={{ fontSize: "2rem", flexShrink: 0 }}>🧙</span>
                       )}
                       <span style={{ flexGrow: 1 }}>
-                        <strong>{char.name}</strong> - Lvl {char.level} {char.race} {char.character_class}
+                        <strong>{char.name}</strong> - {t('characters.lvl')} {char.level} {char.race} {char.character_class}
                         {char.organization_id && organizations.find((o) => o.id === char.organization_id) && (
                           <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>
                             {organizations.find((o) => o.id === char.organization_id).name}
@@ -1663,15 +1676,15 @@ function App() {
                       </span>
                       <div>
                         <button type="button" onClick={() => loadCharacterDetails(char)}>
-                          View
+                          {t('common.view')}
                         </button>
                         {char.sheet_file_path && (
                           <a href={`${API_URL}/${char.sheet_file_path}`} target="_blank" rel="noreferrer">
-                            <button type="button">Sheet</button>
+                            <button type="button">{t('characters.sheet')}</button>
                           </a>
                         )}
                         <button type="button" onClick={() => deleteCharacter(char.id)}>
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     </li>
@@ -1681,7 +1694,7 @@ function App() {
             ) : (
               <>
                 <button type="button" onClick={() => setSelectedCharacter(null)}>
-                  ← Back to Characters
+                  {t('characters.back')}
                 </button>
                 <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start", marginBottom: "1rem" }}>
                   <div style={{ flexShrink: 0 }}>
@@ -1692,23 +1705,23 @@ function App() {
                           alt={selectedCharacter.name}
                           onClick={() => setSelectedCharacterImage(`${API_URL}/${selectedCharacter.image_path}`)}
                           style={{ width: "96px", height: "96px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "3px solid #8b4513" }}
-                          title="Click to view"
+                          title={t('common.clickToView')}
                         />
-                        <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title="Replace portrait">
-                          🔄 Replace
+                        <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title={t('common.replaceImage')}>
+                          {t('common.replace')}
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
                         </label>
                       </div>
                     ) : (
-                      <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title="Add portrait">
-                        🧙<span>Add portrait</span>
+                      <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
+                        🧙<span>{t('characters.addPortraitShort')}</span>
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
                       </label>
                     )}
                   </div>
                   <div>
                     <h3 style={{ margin: "0 0 0.25rem" }}>
-                      {selectedCharacter.name} - Lvl {selectedCharacter.level} {selectedCharacter.race} {selectedCharacter.character_class}
+                      {selectedCharacter.name} - {t('characters.lvl')} {selectedCharacter.level} {selectedCharacter.race} {selectedCharacter.character_class}
                     </h3>
                     {selectedCharacter.organization_id && organizations.find((o) => o.id === selectedCharacter.organization_id) && (
                       <span style={{ fontSize: "0.85rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "2px 8px", display: "inline-block", marginBottom: "0.5rem" }}>
@@ -1719,19 +1732,19 @@ function App() {
                   </div>
                 </div>
 
-                <h4>Upload Character Sheet</h4>
+                <h4>{t('characters.uploadSheet')}</h4>
                 <input
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg"
                   onChange={(e) => e.target.files[0] && uploadCharacterSheet(selectedCharacter.id, e.target.files[0])}
                 />
 
-                <h4>Inventory</h4>
+                <h4>{t('characters.inventory')}</h4>
                 <form onSubmit={addInventoryItem} className="form">
                   <input
                     value={inventoryDraft.item_name}
                     onChange={(e) => setInventoryDraft((old) => ({ ...old, item_name: e.target.value }))}
-                    placeholder="Item name"
+                    placeholder={t('characters.itemName')}
                     required
                   />
                   <input
@@ -1739,14 +1752,14 @@ function App() {
                     min="1"
                     value={inventoryDraft.quantity}
                     onChange={(e) => setInventoryDraft((old) => ({ ...old, quantity: Number(e.target.value) }))}
-                    placeholder="Quantity"
+                    placeholder={t('resources.quantity')}
                   />
                   <input
                     value={inventoryDraft.description}
                     onChange={(e) => setInventoryDraft((old) => ({ ...old, description: e.target.value }))}
-                    placeholder="Description"
+                    placeholder={t('common.description')}
                   />
-                  <button type="submit">Add Item</button>
+                  <button type="submit">{t('characters.addItem')}</button>
                 </form>
                 <ul>
                   {characterInventory.map((item) => (
@@ -1756,28 +1769,28 @@ function App() {
                         {item.description ? ` - ${item.description}` : ""}
                       </span>
                       <button type="button" onClick={() => deleteInventoryItem(item.id)}>
-                        Delete
+                        {t('common.delete')}
                       </button>
                     </li>
                   ))}
                 </ul>
 
-                <h4>Diary</h4>
+                <h4>{t('characters.diary')}</h4>
                 <form onSubmit={addCharacterDiaryEntry} className="form">
                   <input
                     value={charDiaryDraft.title}
                     onChange={(e) => setCharDiaryDraft((old) => ({ ...old, title: e.target.value }))}
-                    placeholder="Entry title"
+                    placeholder={t('diary.entryTitle')}
                     required
                   />
                   <textarea
                     value={charDiaryDraft.content}
                     onChange={(e) => setCharDiaryDraft((old) => ({ ...old, content: e.target.value }))}
-                    placeholder="What happened?"
+                    placeholder={t('characters.diaryPlaceholder')}
                     rows={4}
                     required
                   />
-                  <button type="submit">Add Entry</button>
+                  <button type="submit">{t('diary.add')}</button>
                 </form>
                 <ul>
                   {characterDiary.map((entry) => (
@@ -1798,8 +1811,8 @@ function App() {
       {activeView === "bestiary" ? (
         <section className="grid">
           <article className="card wide">
-            <h2>Bestiary</h2>
-            <h3>Encountered Creatures</h3>
+            <h2>{t('bestiary.title')}</h2>
+            <h3>{t('bestiary.encountered')}</h3>
             <ul>
               {creatures.map((creature) => (
                 <li key={creature.id} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
@@ -1809,10 +1822,10 @@ function App() {
                       alt={creature.name}
                       onClick={() => setSelectedCreatureImage(`${API_URL}/${creature.image_path}`)}
                       style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
-                      title="Click to view"
+                      title={t('common.clickToView')}
                     />
                   ) : isAdmin ? (
-                    <label style={{ width: "64px", height: "64px", border: "2px dashed #8b4513", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.8rem" }} title="Add image">
+                    <label style={{ width: "64px", height: "64px", border: "2px dashed #8b4513", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.8rem" }} title={t('common.addImage')}>
                       🐉
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
                     </label>
@@ -1824,26 +1837,26 @@ function App() {
                       <strong>{creature.name}</strong>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
                         {isAdmin && creature.image_path && (
-                          <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title="Replace image">
+                          <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
                             🔄
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
                           </label>
                         )}
                         {isAdmin && (
-                          <button type="button" onClick={() => deleteCreature(creature.id)}>Delete</button>
+                          <button type="button" onClick={() => deleteCreature(creature.id)}>{t('common.delete')}</button>
                         )}
                       </div>
                     </div>
-                    {creature.creature_type && <p><strong>Type:</strong> {creature.creature_type}</p>}
-                    {creature.challenge_rating && <p><strong>CR:</strong> {creature.challenge_rating}</p>}
-                    {creature.armor_class > 0 && <p><strong>AC:</strong> {creature.armor_class}</p>}
-                    {creature.hit_points && <p><strong>HP:</strong> {creature.hit_points}</p>}
-                    {creature.speed && <p><strong>Speed:</strong> {creature.speed}</p>}
-                    {creature.abilities && <p><strong>Abilities:</strong> {creature.abilities}</p>}
-                    {creature.weaknesses && <p><strong>Weaknesses:</strong> {creature.weaknesses}</p>}
-                    {creature.resistances && <p><strong>Resistances:</strong> {creature.resistances}</p>}
-                    {creature.immunities && <p><strong>Immunities:</strong> {creature.immunities}</p>}
-                    {creature.notes && <p><strong>Notes:</strong> {creature.notes}</p>}
+                    {creature.creature_type && <p><strong>{t('bestiary.type')}</strong> {creature.creature_type}</p>}
+                    {creature.challenge_rating && <p><strong>{t('bestiary.cr')}</strong> {creature.challenge_rating}</p>}
+                    {creature.armor_class > 0 && <p><strong>{t('bestiary.ac')}</strong> {creature.armor_class}</p>}
+                    {creature.hit_points && <p><strong>{t('bestiary.hp')}</strong> {creature.hit_points}</p>}
+                    {creature.speed && <p><strong>{t('bestiary.speed')}</strong> {creature.speed}</p>}
+                    {creature.abilities && <p><strong>{t('bestiary.abilities')}</strong> {creature.abilities}</p>}
+                    {creature.weaknesses && <p><strong>{t('bestiary.weaknesses')}</strong> {creature.weaknesses}</p>}
+                    {creature.resistances && <p><strong>{t('bestiary.resistances')}</strong> {creature.resistances}</p>}
+                    {creature.immunities && <p><strong>{t('bestiary.immunities')}</strong> {creature.immunities}</p>}
+                    {creature.notes && <p><strong>{t('bestiary.notesLabel')}</strong> {creature.notes}</p>}
                   </div>
                 </li>
               ))}
@@ -1867,91 +1880,104 @@ function App() {
       {/* ORGANIZATIONS VIEW */}
       {activeView === "organizations" ? (
         <section style={{ padding: "1rem", maxWidth: "1200px", margin: "0 auto" }}>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <h2 style={{ margin: 0 }}>🏰 Organizations</h2>
-          </div>
+          <div className="card wide">
+            <h2>{t('organizations.title')}</h2>
 
-          {organizations.length === 0 && (
-            <p style={{ color: "#888", textAlign: "center", marginTop: "2rem" }}>No organizations yet.</p>
-          )}
+            {organizations.length === 0 && (
+              <p style={{ textAlign: "center", marginTop: "1rem" }}>{t('organizations.empty')}</p>
+            )}
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-            {organizations.map((org) => {
-              const memberCount = allies.filter((a) => a.organization_id === org.id).length;
-              const isSelected = selectedOrg?.id === org.id;
-              return (
-                <div
-                  key={org.id}
-                  onClick={() => setSelectedOrg(isSelected ? null : org)}
-                  style={{ width: "220px", border: `2px solid ${isSelected ? "#8b4513" : "#c8a87a"}`, borderRadius: "8px", overflow: "hidden", cursor: "pointer", background: isSelected ? "#f9f0e0" : "#fff", boxShadow: isSelected ? "0 2px 12px rgba(139,69,19,0.2)" : "0 1px 4px rgba(0,0,0,0.08)", transition: "box-shadow 0.15s" }}
-                >
-                  <div style={{ height: "120px", background: "#e8d5b0", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                    {org.image_path ? (
-                      <img src={`${API_URL}/${org.image_path}`} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      <span style={{ fontSize: "3rem" }}>🏰</span>
-                    )}
-                  </div>
-                  <div style={{ padding: "0.6rem 0.75rem" }}>
-                    <strong style={{ display: "block", marginBottom: "0.2rem" }}>{org.name}</strong>
-                    {org.description && <p style={{ margin: "0 0 0.4rem", fontSize: "0.82rem", color: "#666", lineHeight: 1.3 }}>{org.description}</p>}
-                    <small style={{ color: "#8b4513" }}>{memberCount} member{memberCount !== 1 ? "s" : ""}</small>
-                    {isAdmin && (
-                      <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }} onClick={(e) => e.stopPropagation()}>
-                        <label style={{ fontSize: "0.78rem", cursor: "pointer", color: "#8b4513", background: "#f9f0e0", border: "1px solid #c8a87a", borderRadius: "3px", padding: "2px 6px" }} title="Replace image">
-                          🖼️ Image
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadOrganizationImage(org.id, e.target.files[0]); }} />
-                        </label>
-                        <button type="button" onClick={() => deleteOrganization(org.id)} style={{ fontSize: "0.78rem", padding: "2px 6px" }}>Delete</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {selectedOrg && (
-            <div style={{ marginTop: "1.5rem", border: "2px solid #8b4513", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "#f9f0e0", borderBottom: "1px solid #c8a87a" }}>
-                {selectedOrg.image_path && (
-                  <img
-                    src={`${API_URL}/${selectedOrg.image_path}`}
-                    alt={selectedOrg.name}
-                    onClick={(e) => { e.stopPropagation(); setSelectedOrgImage(`${API_URL}/${selectedOrg.image_path}`); }}
-                    style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "6px", cursor: "zoom-in", border: "2px solid #8b4513", flexShrink: 0 }}
-                  />
-                )}
-                <div style={{ flexGrow: 1 }}>
-                  <h3 style={{ margin: 0 }}>{selectedOrg.name}</h3>
-                  {selectedOrg.description && <p style={{ margin: "0.2rem 0 0", color: "#5d3a1a", fontSize: "0.9rem" }}>{selectedOrg.description}</p>}
-                </div>
-                <button type="button" onClick={() => setSelectedOrg(null)} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "#8b4513" }}>✕</button>
-              </div>
-              <div style={{ padding: "1rem" }}>
-                <h4 style={{ margin: "0 0 0.75rem" }}>Members</h4>
-                {allies.filter((a) => a.organization_id === selectedOrg.id).length === 0 ? (
-                  <p style={{ color: "#888", margin: 0 }}>No NPCs assigned to this organization yet. Assign them from the NPCs tab.</p>
-                ) : (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                    {allies.filter((a) => a.organization_id === selectedOrg.id).map((ally) => (
-                      <div key={ally.id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.5rem 0.75rem", border: "1px solid #e8d5b0", borderRadius: "6px", background: "#fdf8f0" }}>
-                        {ally.image_path ? (
-                          <img src={`${API_URL}/${ally.image_path}`} alt={ally.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "50%", border: "2px solid #8b4513" }} />
-                        ) : (
-                          <span style={{ fontSize: "1.4rem" }}>👤</span>
-                        )}
-                        <div>
-                          <strong style={{ fontSize: "0.9rem" }}>{ally.name}</strong>
-                          {ally.role && <p style={{ margin: 0, fontSize: "0.78rem", color: "#666" }}>{ally.role}</p>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+              {organizations.map((org) => {
+                const memberCount = allies.filter((a) => a.organization_id === org.id).length;
+                const isSelected = selectedOrg?.id === org.id;
+                return (
+                  <div
+                    key={org.id}
+                    onClick={() => setSelectedOrg(isSelected ? null : org)}
+                    style={{
+                      width: "220px",
+                      border: `2px solid ${isSelected ? "var(--sienna)" : "var(--gold-dark)"}`,
+                      borderRadius: "var(--border-radius)",
+                      overflow: "hidden",
+                      cursor: "pointer",
+                      background: isSelected
+                        ? "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)"
+                        : "linear-gradient(160deg, #fdf8ef 0%, #f5e9d0 100%)",
+                      boxShadow: isSelected
+                        ? "0 4px 16px rgba(107,45,15,0.35), 0 0 0 1px var(--gold)"
+                        : "0 2px 8px rgba(0,0,0,0.25)",
+                      transition: "box-shadow 0.15s, border-color 0.15s",
+                    }}
+                  >
+                    <div style={{ height: "120px", background: "var(--parchment-dark)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {org.image_path ? (
+                        <img src={`${API_URL}/${org.image_path}`} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ fontSize: "3rem" }}>🏰</span>
+                      )}
+                    </div>
+                    <div style={{ padding: "0.6rem 0.75rem" }}>
+                      <strong style={{ display: "block", marginBottom: "0.2rem", fontFamily: "'Cinzel', serif", color: "var(--sienna-dark)" }}>{org.name}</strong>
+                      {org.description && <p style={{ margin: "0 0 0.4rem", fontSize: "0.82rem", color: "var(--ink-light)", lineHeight: 1.3 }}>{org.description}</p>}
+                      <small style={{ color: "var(--gold-dark)" }}>{memberCount} {memberCount !== 1 ? t('organizations.members') : t('organizations.member')}</small>
+                      {isAdmin && (
+                        <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }} onClick={(e) => e.stopPropagation()}>
+                          <label style={{ fontSize: "0.78rem", cursor: "pointer" }} title={t('common.replaceImage')}>
+                            {t('common.imageLabel')}
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadOrganizationImage(org.id, e.target.files[0]); }} />
+                          </label>
+                          <button type="button" onClick={() => deleteOrganization(org.id)} style={{ fontSize: "0.78rem", padding: "2px 6px" }}>{t('common.delete')}</button>
                         </div>
-                      </div>
-                    ))}
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
             </div>
-          )}
+
+            {selectedOrg && (
+              <div style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "rgba(107,45,15,0.08)", borderBottom: "1px solid var(--gold-dark)" }}>
+                  {selectedOrg.image_path && (
+                    <img
+                      src={`${API_URL}/${selectedOrg.image_path}`}
+                      alt={selectedOrg.name}
+                      onClick={(e) => { e.stopPropagation(); setSelectedOrgImage(`${API_URL}/${selectedOrg.image_path}`); }}
+                      style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "6px", cursor: "zoom-in", border: "2px solid var(--gold-dark)", flexShrink: 0 }}
+                    />
+                  )}
+                  <div style={{ flexGrow: 1 }}>
+                    <h3 style={{ margin: 0, fontFamily: "'Cinzel', serif", color: "var(--sienna-dark)" }}>{selectedOrg.name}</h3>
+                    {selectedOrg.description && <p style={{ margin: "0.2rem 0 0", color: "var(--ink-mid)", fontSize: "0.9rem" }}>{selectedOrg.description}</p>}
+                  </div>
+                  <button type="button" onClick={() => setSelectedOrg(null)} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "var(--sienna)" }}>✕</button>
+                </div>
+                <div style={{ padding: "1rem" }}>
+                  <h4 style={{ margin: "0 0 0.75rem" }}>{t('organizations.membersSection')}</h4>
+                  {allies.filter((a) => a.organization_id === selectedOrg.id).length === 0 ? (
+                    <p style={{ margin: 0 }}>{t('organizations.noMembers')}</p>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                      {allies.filter((a) => a.organization_id === selectedOrg.id).map((ally) => (
+                        <div key={ally.id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.5rem 0.75rem", border: "1px solid var(--gold-dark)", borderRadius: "var(--border-radius)", background: "rgba(255,255,255,0.45)" }}>
+                          {ally.image_path ? (
+                            <img src={`${API_URL}/${ally.image_path}`} alt={ally.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "50%", border: "2px solid var(--gold-dark)" }} />
+                          ) : (
+                            <span style={{ fontSize: "1.4rem" }}>👤</span>
+                          )}
+                          <div>
+                            <strong style={{ fontSize: "0.9rem" }}>{ally.name}</strong>
+                            {ally.role && <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--ink-light)" }}>{ally.role}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {selectedOrgImage && (
             <div onClick={() => setSelectedOrgImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
@@ -1965,9 +1991,9 @@ function App() {
       {activeView === "npcs" ? (
         <section className="grid">
           <article className="card wide">
-            <h2>👤 NPCs</h2>
+            <h2>{t('npcs.title')}</h2>
 
-            <h3>Known NPCs</h3>
+            <h3>{t('npcs.known')}</h3>
             <ul>
               {allies.map((ally) => {
                 const org = organizations.find((o) => o.id === ally.organization_id);
@@ -1979,10 +2005,10 @@ function App() {
                         alt={ally.name}
                         onClick={() => setSelectedAllyImage(`${API_URL}/${ally.image_path}`)}
                         style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
-                        title="Click to view"
+                        title={t('common.clickToView')}
                       />
                     ) : isAdmin ? (
-                      <label style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px dashed #8b4513", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.4rem" }} title="Add portrait">
+                      <label style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px dashed #8b4513", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.4rem" }} title={t('npcs.addPortrait')}>
                         👤
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
                       </label>
@@ -1997,21 +2023,21 @@ function App() {
                             <span
                               onClick={() => { navigate("organizations"); setSelectedOrg(org); }}
                               style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#8b4513", cursor: "pointer", textDecoration: "underline" }}
-                              title="Go to organization"
+                              title={t('npcs.goToOrg')}
                             >({org.name})</span>
                           )}
-                          {ally.alignment === "allied" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#2d6a2d", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>✅ Allied</span>}
-                          {ally.alignment === "foe" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#8b1a1a", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>⚔️ Foe</span>}
-                          {ally.alignment === "neutral" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#666", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>➖ Neutral</span>}
+                          {ally.alignment === "allied" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#2d6a2d", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>{t('npcs.allied')}</span>}
+                          {ally.alignment === "foe" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#8b1a1a", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>{t('npcs.foe')}</span>}
+                          {ally.alignment === "neutral" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#666", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>{t('npcs.neutral')}</span>}
                         </div>
                         <div style={{ display: "flex", gap: "0.25rem" }}>
                           {isAdmin && ally.image_path && (
-                            <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title="Replace portrait">
+                            <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
                               🔄
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
                             </label>
                           )}
-                          {isAdmin && <button type="button" onClick={() => deleteAlly(ally.id)}>Delete</button>}
+                          {isAdmin && <button type="button" onClick={() => deleteAlly(ally.id)}>{t('common.delete')}</button>}
                         </div>
                       </div>
                       {isAuthenticated && (
@@ -2020,23 +2046,23 @@ function App() {
                             type="button"
                             onClick={() => setAllyAlignment(ally.id, "allied")}
                             style={{ fontSize: "0.75rem", padding: "2px 8px", background: ally.alignment === "allied" ? "#2d6a2d" : undefined, color: ally.alignment === "allied" ? "#fff" : undefined }}
-                          >✅ Allied</button>
+                          >{t('npcs.allied')}</button>
                           <button
                             type="button"
                             onClick={() => setAllyAlignment(ally.id, "neutral")}
                             style={{ fontSize: "0.75rem", padding: "2px 8px", background: ally.alignment === "neutral" ? "#555" : undefined, color: ally.alignment === "neutral" ? "#fff" : undefined }}
-                          >➖ Neutral</button>
+                          >{t('npcs.neutral')}</button>
                           <button
                             type="button"
                             onClick={() => setAllyAlignment(ally.id, "foe")}
                             style={{ fontSize: "0.75rem", padding: "2px 8px", background: ally.alignment === "foe" ? "#8b1a1a" : undefined, color: ally.alignment === "foe" ? "#fff" : undefined }}
-                          >⚔️ Foe</button>
+                          >{t('npcs.foe')}</button>
                         </div>
                       )}
-                      {ally.role && <p style={{ margin: "0.2rem 0 0" }}><strong>Role:</strong> {ally.role}</p>}
-                      {ally.location && <p style={{ margin: "0.2rem 0 0" }}><strong>Location:</strong> {ally.location}</p>}
-                      {ally.relationship && <p style={{ margin: "0.2rem 0 0" }}><strong>Relationship:</strong> {ally.relationship}</p>}
-                      {ally.notes && <p style={{ margin: "0.2rem 0 0" }}><strong>Notes:</strong> {ally.notes}</p>}
+                      {ally.role && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.roleLabel')}</strong> {ally.role}</p>}
+                      {ally.location && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.locationLabel')}</strong> {ally.location}</p>}
+                      {ally.relationship && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.relationshipLabel')}</strong> {ally.relationship}</p>}
+                      {ally.notes && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.notesLabel')}</strong> {ally.notes}</p>}
                     </div>
                   </li>
                 );
@@ -2056,16 +2082,16 @@ function App() {
       {activeView === "admin" && isAuthenticated && isAdmin ? (
         <section className="grid">
           <article className="card wide">
-            <h2>🗺️ Manage Maps</h2>
-            <h3>Upload New Map</h3>
+            <h2>{t('admin.manageMaps')}</h2>
+            <h3>{t('admin.uploadMap')}</h3>
             <form onSubmit={uploadMap} className="form">
-              <input name="name" placeholder="Map Name" required />
-              <input name="description" placeholder="Description" />
+              <input name="name" placeholder={t('admin.mapName')} required />
+              <input name="description" placeholder={t('common.description')} />
               <input name="file" type="file" accept="image/*" required />
-              <button type="submit">Upload Map</button>
+              <button type="submit">{t('admin.uploadMapBtn')}</button>
             </form>
 
-            <h3>Uploaded Maps</h3>
+            <h3>{t('admin.uploadedMaps')}</h3>
             <ul>
               {maps.map((map) => (
                 <li key={map.id} className="row">
@@ -2080,10 +2106,10 @@ function App() {
                         loadMapPOIs(map.id);
                       }}
                     >
-                      Manage POIs
+                      {t('admin.managePOIs')}
                     </button>
                     <button type="button" onClick={() => deleteMap(map.id)}>
-                      Delete
+                      {t('common.delete')}
                     </button>
                   </div>
                 </li>
@@ -2092,11 +2118,11 @@ function App() {
 
             {selectedMap && (
               <>
-                <h3>Manage Points of Interest - {selectedMap.name}</h3>
+                <h3>{t('admin.managePOIsFor')} - {selectedMap.name}</h3>
                 <button type="button" onClick={() => { setSelectedMap(null); setPoiDraft(null); }} style={{ marginBottom: "1rem" }}>
-                  ← Back to Maps
+                  {t('admin.backToMaps')}
                 </button>
-                <p>Click the map to place a new POI.</p>
+                <p>{t('admin.clickToPlacePOI')}</p>
                 <MapView
                   events={selectedMapPOIs}
                   onMapClick={addPOI}
@@ -2105,31 +2131,31 @@ function App() {
                 />
                 {poiDraft && (
                   <form onSubmit={submitPOI} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
-                    <p style={{ margin: 0 }}><strong>📌 New POI</strong> at {poiDraft.latitude.toFixed(1)}%, {poiDraft.longitude.toFixed(1)}%</p>
+                    <p style={{ margin: 0 }}><strong>{t('admin.newPOI')}</strong> {t('tracker.at')} {poiDraft.latitude.toFixed(1)}%, {poiDraft.longitude.toFixed(1)}%</p>
                     <input
                       value={poiDraftData.title}
                       onChange={(e) => setPoiDraftData((d) => ({ ...d, title: e.target.value }))}
-                      placeholder="Title"
+                      placeholder={t('common.title')}
                       required
                     />
                     <input
                       value={poiDraftData.description}
                       onChange={(e) => setPoiDraftData((d) => ({ ...d, description: e.target.value }))}
-                      placeholder="Description (optional)"
+                      placeholder={t('common.descriptionOptional')}
                     />
                     <select value={poiDraftData.poi_type} onChange={(e) => setPoiDraftData((d) => ({ ...d, poi_type: e.target.value }))}>
-                      <option value="location">Location</option>
-                      <option value="city">City</option>
-                      <option value="dungeon">Dungeon</option>
-                      <option value="landmark">Landmark</option>
-                      <option value="quest">Quest</option>
+                      <option value="location">{t('tracker.location')}</option>
+                      <option value="city">{t('tracker.city')}</option>
+                      <option value="dungeon">{t('tracker.dungeon')}</option>
+                      <option value="landmark">{t('tracker.landmark')}</option>
+                      <option value="quest">{t('tracker.quest')}</option>
                     </select>
-                    <label style={{ fontSize: "0.9rem" }}>Image (optional):
+                    <label style={{ fontSize: "0.9rem" }}>{t('common.imageOptional')}:
                       <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setPoiImageFile(e.target.files[0] || null)} />
                     </label>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button type="submit">Add POI</button>
-                      <button type="button" onClick={() => setPoiDraft(null)}>Cancel</button>
+                      <button type="submit">{t('admin.addPOI')}</button>
+                      <button type="button" onClick={() => setPoiDraft(null)}>{t('common.cancel')}</button>
                     </div>
                   </form>
                 )}
@@ -2139,21 +2165,21 @@ function App() {
                       {editingPoi?.id === poi.id ? (
                         <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                           <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder="Description" style={{ flex: "1 1 120px" }} />
+                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
                           <select value={editingPoi.poi_type} onChange={(e) => setEditingPoi((p) => ({ ...p, poi_type: e.target.value }))}>
-                            <option value="location">Location</option>
-                            <option value="city">City</option>
-                            <option value="dungeon">Dungeon</option>
-                            <option value="landmark">Landmark</option>
-                            <option value="quest">Quest</option>
+                            <option value="location">{t('tracker.location')}</option>
+                            <option value="city">{t('tracker.city')}</option>
+                            <option value="dungeon">{t('tracker.dungeon')}</option>
+                            <option value="landmark">{t('tracker.landmark')}</option>
+                            <option value="quest">{t('tracker.quest')}</option>
                           </select>
                           <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingPoi.image_path ? "Replace image" : "Add image"}
+                            🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
                           </label>
                           {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
-                          <button type="submit">Save</button>
-                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>Cancel</button>
+                          <button type="submit">{t('common.save')}</button>
+                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
                         </form>
                       ) : (
                         <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
@@ -2164,12 +2190,12 @@ function App() {
                             <img src={`${API_URL}/${poi.image_path}`} alt={poi.title} style={{ height: "36px", borderRadius: "3px" }} />
                           ) : (
                             <label style={{ fontSize: "0.8rem", cursor: "pointer" }}>
-                              🖼️ Add image
+                              🖼️ {t('common.addImage')}
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadPOIImage(poi.id, e.target.files[0]); }} />
                             </label>
                           )}
-                          <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>Edit</button>
-                          <button type="button" onClick={() => deletePOI(poi.id)}>Delete</button>
+                          <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>{t('common.edit')}</button>
+                          <button type="button" onClick={() => deletePOI(poi.id)}>{t('common.delete')}</button>
                         </div>
                       )}
                     </li>
@@ -2180,159 +2206,159 @@ function App() {
           </article>
 
           <article className="card wide">
-            <h2>🐉 Manage Bestiary</h2>
-            <h3>Add Creature</h3>
+            <h2>{t('admin.manageBestiary')}</h2>
+            <h3>{t('admin.addCreature')}</h3>
             <form onSubmit={submitCreature} className="form">
               <input
                 value={creatureDraft.name}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, name: e.target.value }))}
-                placeholder="Creature Name"
+                placeholder={t('admin.creatureName')}
                 required
               />
               <input
                 value={creatureDraft.creature_type}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, creature_type: e.target.value }))}
-                placeholder="Type (e.g., Dragon, Undead)"
+                placeholder={t('admin.creatureTypePlaceholder')}
               />
               <input
                 value={creatureDraft.challenge_rating}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, challenge_rating: e.target.value }))}
-                placeholder="Challenge Rating"
+                placeholder={t('admin.challengeRating')}
               />
               <input
                 type="number"
                 value={creatureDraft.armor_class}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, armor_class: Number(e.target.value) }))}
-                placeholder="Armor Class"
+                placeholder={t('admin.armorClass')}
               />
               <input
                 value={creatureDraft.hit_points}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, hit_points: e.target.value }))}
-                placeholder="Hit Points"
+                placeholder={t('admin.hitPoints')}
               />
               <input
                 value={creatureDraft.speed}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, speed: e.target.value }))}
-                placeholder="Speed"
+                placeholder={t('admin.speedPlaceholder')}
               />
               <textarea
                 value={creatureDraft.abilities}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, abilities: e.target.value }))}
-                placeholder="Abilities"
+                placeholder={t('admin.abilities')}
                 rows={2}
               />
               <textarea
                 value={creatureDraft.weaknesses}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, weaknesses: e.target.value }))}
-                placeholder="Weaknesses"
+                placeholder={t('admin.weaknesses')}
                 rows={2}
               />
               <textarea
                 value={creatureDraft.resistances}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, resistances: e.target.value }))}
-                placeholder="Resistances"
+                placeholder={t('admin.resistances')}
                 rows={2}
               />
               <textarea
                 value={creatureDraft.immunities}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, immunities: e.target.value }))}
-                placeholder="Immunities"
+                placeholder={t('admin.immunities')}
                 rows={2}
               />
               <textarea
                 value={creatureDraft.notes}
                 onChange={(e) => setCreatureDraft((old) => ({ ...old, notes: e.target.value }))}
-                placeholder="Notes"
+                placeholder={t('common.notes')}
                 rows={3}
               />
               <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                🖼️ Image (optional)
+                {t('common.imageOptionalLabel')}
                 <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setCreatureImageFile(e.target.files[0] || null)} />
               </label>
               {creatureImageFile && <small style={{ color: "#5d3a1a" }}>{creatureImageFile.name}</small>}
-              <button type="submit">Add Creature</button>
+              <button type="submit">{t('admin.addCreature')}</button>
             </form>
             {creatureError ? <p className="error">{creatureError}</p> : null}
           </article>
 
           <article className="card wide">
-            <h2>🏰 Manage Organizations</h2>
-            <h3>Add Organization</h3>
+            <h2>{t('admin.manageOrgs')}</h2>
+            <h3>{t('admin.addOrg')}</h3>
             <form onSubmit={submitOrganization} className="form">
               <input
                 value={orgDraft.name}
                 onChange={(e) => setOrgDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder="Organization name"
+                placeholder={t('admin.orgNamePlaceholder')}
                 required
               />
               <input
                 value={orgDraft.description}
                 onChange={(e) => setOrgDraft((d) => ({ ...d, description: e.target.value }))}
-                placeholder="Description (optional)"
+                placeholder={t('common.descriptionOptional')}
               />
               <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                🖼️ {orgImageFile ? orgImageFile.name : "Add image (optional)"}
+                🖼️ {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setOrgImageFile(e.target.files[0] || null)} />
               </label>
-              <button type="submit">Add Organization</button>
+              <button type="submit">{t('admin.addOrgBtn')}</button>
             </form>
             {orgError ? <p className="error">{orgError}</p> : null}
           </article>
 
           <article className="card wide">
-            <h2>👤 Manage NPCs</h2>
-            <h3>Add NPC</h3>
+            <h2>{t('admin.manageNPCs')}</h2>
+            <h3>{t('admin.addNPC')}</h3>
             <form onSubmit={submitAlly} className="form">
               <input
                 value={allyDraft.name}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, name: e.target.value }))}
-                placeholder="Name"
+                placeholder={t('common.name')}
                 required
               />
               <input
                 value={allyDraft.role}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, role: e.target.value }))}
-                placeholder="Role (e.g., Merchant, Guard)"
+                placeholder={t('admin.rolePlaceholder')}
               />
               <input
                 value={allyDraft.location}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, location: e.target.value }))}
-                placeholder="Location"
+                placeholder={t('admin.locationPlaceholder')}
               />
               <textarea
                 value={allyDraft.relationship}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, relationship: e.target.value }))}
-                placeholder="Relationship with party"
+                placeholder={t('admin.relationshipPlaceholder')}
                 rows={2}
               />
               <textarea
                 value={allyDraft.notes}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, notes: e.target.value }))}
-                placeholder="Notes"
+                placeholder={t('common.notes')}
                 rows={3}
               />
               <select
                 value={allyDraft.organization_id ?? ""}
                 onChange={(e) => setAllyDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
               >
-                <option value="">— No organization —</option>
+                <option value="">{t('admin.noOrgOption')}</option>
                 {organizations.map((org) => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
               </select>
               <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                🖼️ {allyImageFile ? allyImageFile.name : "Portrait (optional)"}
+                🖼️ {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setAllyImageFile(e.target.files[0] || null)} />
               </label>
-              <button type="submit">Add NPC</button>
+              <button type="submit">{t('admin.addNPCBtn')}</button>
             </form>
             {allyError ? <p className="error">{allyError}</p> : null}
           </article>
 
           <article className="card wide">
-            <h2>👥 User Management</h2>
+            <h2>{t('admin.userManagement')}</h2>
             <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
-              Load Users
+              {t('admin.loadUsers')}
             </button>
             {users.length > 0 && (
               <ul>
@@ -2341,36 +2367,36 @@ function App() {
                     <span>
                       <strong>{u.username}</strong>
                       {u.is_admin ? (
-                        <span style={{ marginLeft: "0.5rem", color: "#8b4513", fontWeight: "bold" }}>👑 Admin</span>
+                        <span style={{ marginLeft: "0.5rem", color: "#8b4513", fontWeight: "bold" }}>{t('admin.adminBadge')}</span>
                       ) : (
-                        <span style={{ marginLeft: "0.5rem", color: "#666" }}>🗡️ Player</span>
+                        <span style={{ marginLeft: "0.5rem", color: "#666" }}>{t('admin.player')}</span>
                       )}
                     </span>
                     <button type="button" onClick={() => toggleAdmin(u.id, u.is_admin)}>
-                      {u.is_admin ? "Remove Admin" : "Make Admin"}
+                      {u.is_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            {users.length === 0 && <p><small>Click "Load Users" to see all registered users.</small></p>}
+            {users.length === 0 && <p><small>{t('admin.loadUsersHint')}</small></p>}
           </article>
         </section>
       ) : activeView === "admin" && !isAuthenticated ? (
         <section className="grid">
           <article className="card">
-            <h2>🔓 Login Required</h2>
-            <p>You must be logged in with an admin account to access this page.</p>
+            <h2>{t('admin.loginRequired')}</h2>
+            <p>{t('admin.loginRequiredMsg')}</p>
             <button type="button" onClick={() => navigate("login")} style={{ marginTop: "1rem" }}>
-              Go to Login
+              {t('admin.goToLogin')}
             </button>
           </article>
         </section>
       ) : activeView === "admin" && isAuthenticated && !isAdmin ? (
         <section className="grid">
           <article className="card">
-            <h2>🔒 Access Denied</h2>
-            <p>You do not have administrator privileges.</p>
+            <h2>{t('admin.accessDenied')}</h2>
+            <p>{t('admin.accessDeniedMsg')}</p>
           </article>
         </section>
       ) : null}
