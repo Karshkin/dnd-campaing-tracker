@@ -1182,7 +1182,7 @@ function App() {
   return (
     <main>
       <header>
-        <h1>⚔️ Campaign Chronicle</h1>
+        <h1>Campaign Chronicle<span>Tome of Adventures</span></h1>
         <div className="tabs">
           <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
             📜 Chronicle
