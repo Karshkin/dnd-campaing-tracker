@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -17,9 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
-
-# Create directories for uploads and database
-RUN mkdir -p uploads/character_sheets uploads/maps uploads/marker_images
 
 # Create a non-root user to run the app
 RUN useradd -m -u 1000 appuser && \

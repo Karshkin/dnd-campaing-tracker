@@ -26,16 +26,30 @@ if [ ! -f .env ]; then
     cp .env.docker .env
     
     # Generate a random secret key
-    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || openssl rand -hex 32)
-    
-    # Replace the secret key in .env file
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/your-secret-key-here-change-this-in-production/$SECRET_KEY/" .env
-    else
-        sed -i "s/your-secret-key-here-change-this-in-production/$SECRET_KEY/" .env
+    SECRET_KEY=""
+    if command -v python3 &> /dev/null; then
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)
     fi
     
-    echo "✅ Created .env file with generated SECRET_KEY"
+    if [ -z "$SECRET_KEY" ] && command -v openssl &> /dev/null; then
+        SECRET_KEY=$(openssl rand -hex 32)
+    fi
+    
+    if [ -z "$SECRET_KEY" ]; then
+        echo "⚠️  Warning: Could not generate SECRET_KEY automatically."
+        echo "    Please install either Python 3 or OpenSSL to generate a secure key."
+        echo "    Or manually edit .env and set SECRET_KEY to a random 64-character hex string."
+        echo ""
+    else
+        # Replace the secret key in .env file
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/your-secret-key-here-change-this-in-production/$SECRET_KEY/" .env
+        else
+            sed -i "s/your-secret-key-here-change-this-in-production/$SECRET_KEY/" .env
+        fi
+        echo "✅ Created .env file with generated SECRET_KEY"
+    fi
+    
     echo "⚠️  IMPORTANT: Edit .env and set ALLOWED_ORIGINS to your frontend domain!"
     echo ""
     read -p "Press Enter to continue after updating ALLOWED_ORIGINS in .env..."

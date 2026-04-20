@@ -82,10 +82,11 @@ If you prefer not to use Docker Compose:
 2. Connect your GitHub repository
 3. Configure:
    - **Root Directory:** `backend`
-   - **Build Command:** `docker build -t backend .`
-   - **Start Command:** `docker run -p 10000:8000 backend`
+   - **Runtime:** Docker
    - **Add Disk:** Mount path `/app/data` for database persistence
-4. Add environment variables in Render dashboard
+4. Add environment variables in Render dashboard:
+   - `SECRET_KEY`
+   - `ALLOWED_ORIGINS`
 5. Deploy!
 
 ### Railway.app
