@@ -81,22 +81,31 @@ VITE_API_URL="http://localhost:8000" npm run dev
 
 ## GitHub Pages Deployment
 
-The frontend is deployed to GitHub Pages at:
+The frontend can be deployed to GitHub Pages at:
 
 `https://karshkin.github.io/dnd-campaing-tracker/`
 
-The deployment workflow (`.github/workflows/deploy.yml`) builds only the React + Vite frontend from `frontend/` and publishes `frontend/dist`.
+The deployment workflow (`.github/workflows/deploy.yml`) automatically builds the React + Vite frontend from `frontend/` and publishes to GitHub Pages.
 
-> Note: The FastAPI backend is not deployed to GitHub Pages. If you deploy the backend separately, set `VITE_API_URL` to your backend URL.
+> **Important Note**: The FastAPI backend is not deployed to GitHub Pages (only static frontend). The app will run in frontend-only mode on Pages. To use the full features with backend API, you need to deploy the backend separately and configure `VITE_API_URL`.
 
-If Pages is not enabled yet in your repository:
+### Enabling GitHub Pages
 
-1. Go to **Settings** → **Pages**
-2. Under **Build and deployment**, set **Source** to **Deploy from a branch**
-3. Select branch **`gh-pages`** and folder **`/ (root)`**
-4. Save
+To enable GitHub Pages for your repository:
 
-After pushing to `main`, GitHub Actions will deploy the latest frontend build automatically.
+1. **Merge this branch to `main`** - The workflow only runs on pushes to the `main` branch
+2. **Enable GitHub Pages**:
+   - Go to your repository **Settings** → **Pages**
+   - Under **Build and deployment**, set **Source** to **Deploy from a branch**
+   - Select branch **`gh-pages`** and folder **`/ (root)`**
+   - Click **Save**
+3. **Wait for deployment** - After merging to `main`, GitHub Actions will automatically:
+   - Build the frontend
+   - Create/update the `gh-pages` branch
+   - Deploy to GitHub Pages
+4. **Access your app** - Visit `https://karshkin.github.io/dnd-campaing-tracker/` to see your deployed app
+
+The deployment will automatically update whenever you push changes to the `main` branch.
 
 ## Authentication Setup
 
