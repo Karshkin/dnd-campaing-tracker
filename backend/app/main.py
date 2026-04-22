@@ -15,6 +15,7 @@ from .auth import (
     get_current_active_user,
     get_current_admin_user,
     get_password_hash,
+    require_page_permission,
 )
 from .database import SessionLocal, engine
 from .file_handler import CHARACTER_SHEETS_DIR, MAPS_DIR, MARKER_IMAGES_DIR, delete_file, save_upload_file
@@ -29,11 +30,15 @@ from .models import (
     Map,
     MapEvent,
     Organization,
+    PAGE_KEYS,
     PointOfInterest,
+    PagePermission,
     Resource,
     User,
 )
 from .schemas import (
+    AdminPasswordReset,
+    AdminUserCreate,
     AllyCreate,
     AllyRead,
     CharacterCreate,
@@ -43,17 +48,19 @@ from .schemas import (
     CharacterInventoryRead,
     CharacterRead,
     CharacterUpdate,
+    CurrentUserRead,
     CreatureCreate,
     CreatureRead,
     DiaryEntryCreate,
     DiaryEntryRead,
-    MapCreate,
     MapEventCreate,
     MapEventRead,
     MapEventUpdate,
     MapRead,
     OrganizationCreate,
     OrganizationRead,
+    PagePermissionRead,
+    PagePermissionUpdate,
     PointOfInterestCreate,
     PointOfInterestRead,
     PointOfInterestUpdate,
@@ -64,6 +71,7 @@ from .schemas import (
     UserLogin,
     UserRead,
     UserRegister,
+    UserWithPermissionsRead,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -117,6 +125,27 @@ try:
 except Exception:
     pass
 
+try:
+    _conn = _sqlite3.connect("campaign.db")
+    _conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS page_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            page_key VARCHAR(50) NOT NULL,
+            permission_level VARCHAR(20) NOT NULL DEFAULT 'none',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_page_permissions_user_page UNIQUE (user_id, page_key),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    _conn.commit()
+    _conn.close()
+except Exception:
+    pass
+
 app = FastAPI(title="DnD Campaign Tracker API")
 
 raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
@@ -133,6 +162,15 @@ app.add_middleware(
 # Mount uploads directory for serving files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+DEFAULT_SELF_REGISTER_PERMISSIONS = {
+    "tracker": "view",
+    "characters": "edit",
+    "bestiary": "view",
+    "organizations": "view",
+    "npcs": "view",
+    "admin": "none",
+}
+
 
 def get_db():
     db = SessionLocal()
@@ -140,6 +178,56 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def assign_page_permissions(db: Session, user_id: int, permissions: dict[str, str]) -> None:
+    for page_key, permission_level in permissions.items():
+        db.add(PagePermission(user_id=user_id, page_key=page_key, permission_level=permission_level))
+
+
+def ensure_user_permissions(db: Session, user: User) -> list[PagePermission]:
+    existing = {
+        permission.page_key: permission
+        for permission in db.query(PagePermission).filter(PagePermission.user_id == user.id).all()
+    }
+    changed = False
+
+    for page_key in PAGE_KEYS:
+        if page_key not in existing:
+            default_level = "admin" if user.is_admin and page_key == "admin" else DEFAULT_SELF_REGISTER_PERMISSIONS.get(page_key, "none")
+            permission = PagePermission(user_id=user.id, page_key=page_key, permission_level=default_level)
+            db.add(permission)
+            existing[page_key] = permission
+            changed = True
+
+    if changed:
+        db.commit()
+
+    return [existing[page_key] for page_key in PAGE_KEYS]
+
+
+def serialize_user_with_permissions(db: Session, user: User) -> dict:
+    permissions = ensure_user_permissions(db, user)
+    return {
+        "id": user.id,
+        "username": user.username,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+        "permissions": permissions,
+    }
+
+
+TrackerViewUser = Annotated[User, Depends(require_page_permission("tracker", "view"))]
+TrackerEditUser = Annotated[User, Depends(require_page_permission("tracker", "edit"))]
+CharactersViewUser = Annotated[User, Depends(require_page_permission("characters", "view"))]
+CharactersEditUser = Annotated[User, Depends(require_page_permission("characters", "edit"))]
+BestiaryViewUser = Annotated[User, Depends(require_page_permission("bestiary", "view"))]
+BestiaryEditUser = Annotated[User, Depends(require_page_permission("bestiary", "edit"))]
+OrganizationsViewUser = Annotated[User, Depends(require_page_permission("organizations", "view"))]
+OrganizationsEditUser = Annotated[User, Depends(require_page_permission("organizations", "edit"))]
+NpcsViewUser = Annotated[User, Depends(require_page_permission("npcs", "view"))]
+NpcsEditUser = Annotated[User, Depends(require_page_permission("npcs", "edit"))]
+AdminPageUser = Annotated[User, Depends(require_page_permission("admin", "admin"))]
 
 
 @app.get("/health")
@@ -175,13 +263,15 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    assign_page_permissions(db, new_user.id, DEFAULT_SELF_REGISTER_PERMISSIONS)
+    db.commit()
     return new_user
 
 
-@app.get("/me", response_model=UserRead)
-def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+@app.get("/me", response_model=CurrentUserRead)
+def get_current_user_info(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Get current authenticated user information."""
-    return current_user
+    return serialize_user_with_permissions(db, current_user)
 
 
 @app.post("/init-admin", status_code=201)
@@ -202,7 +292,7 @@ def initialize_admin(payload: UserLogin, db: Session = Depends(get_db)):
 
 
 @app.get("/events", response_model=list[MapEventRead])
-def list_events(map_id: int | None = None, db: Session = Depends(get_db)):
+def list_events(map_id: int | None = None, current_user: TrackerViewUser = None, db: Session = Depends(get_db)):
     query = db.query(MapEvent)
     if map_id is not None:
         query = query.filter(MapEvent.map_id == map_id)
@@ -213,7 +303,7 @@ def list_events(map_id: int | None = None, db: Session = Depends(get_db)):
 def create_event(
     payload: MapEventCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
 ):
     event = MapEvent(**payload.model_dump())
     db.add(event)
@@ -227,7 +317,7 @@ def update_event(
     event_id: int,
     payload: MapEventUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
 ):
     event = db.get(MapEvent, event_id)
     if not event:
@@ -242,7 +332,7 @@ def update_event(
 
 
 @app.delete("/events/{event_id}", status_code=204)
-def delete_event(event_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_event(event_id: int, db: Session = Depends(get_db), current_user: TrackerEditUser = None):
     event = db.get(MapEvent, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -252,7 +342,7 @@ def delete_event(event_id: int, db: Session = Depends(get_db), current_user: Use
 
 
 @app.get("/diary", response_model=list[DiaryEntryRead])
-def list_diary_entries(db: Session = Depends(get_db)):
+def list_diary_entries(current_user: TrackerViewUser = None, db: Session = Depends(get_db)):
     return db.query(DiaryEntry).order_by(DiaryEntry.created_at.desc()).all()
 
 
@@ -260,7 +350,7 @@ def list_diary_entries(db: Session = Depends(get_db)):
 def create_diary_entry(
     payload: DiaryEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
 ):
     entry = DiaryEntry(**payload.model_dump())
     db.add(entry)
@@ -272,7 +362,7 @@ def create_diary_entry(
 @app.delete("/diary/{entry_id}", status_code=204)
 def delete_diary_entry(
     entry_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     entry = db.get(DiaryEntry, entry_id)
@@ -283,7 +373,7 @@ def delete_diary_entry(
 
 
 @app.get("/resources", response_model=list[ResourceRead])
-def list_resources(db: Session = Depends(get_db)):
+def list_resources(current_user: TrackerViewUser = None, db: Session = Depends(get_db)):
     return db.query(Resource).order_by(Resource.name.asc()).all()
 
 
@@ -291,7 +381,7 @@ def list_resources(db: Session = Depends(get_db)):
 def create_resource(
     payload: ResourceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
 ):
     existing = db.query(Resource).filter(Resource.name == payload.name).first()
     if existing:
@@ -309,7 +399,7 @@ def update_resource(
     resource_id: int,
     payload: ResourceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
 ):
     resource = db.get(Resource, resource_id)
     if not resource:
@@ -330,7 +420,7 @@ def update_resource(
 @app.delete("/resources/{resource_id}", status_code=204)
 def delete_resource(
     resource_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     resource = db.get(Resource, resource_id)
@@ -344,7 +434,7 @@ def delete_resource(
 async def upload_resource_image(
     resource_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     resource = db.get(Resource, resource_id)
@@ -361,7 +451,7 @@ async def upload_resource_image(
 
 # ===== CHARACTER ENDPOINTS =====
 @app.get("/characters", response_model=list[CharacterRead])
-def list_characters(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def list_characters(current_user: CharactersViewUser = None, db: Session = Depends(get_db)):
     """List all characters for the current user."""
     return db.query(Character).filter(Character.user_id == current_user.id).all()
 
@@ -369,7 +459,7 @@ def list_characters(current_user: User = Depends(get_current_active_user), db: S
 @app.post("/characters", response_model=CharacterRead, status_code=201)
 def create_character(
     payload: CharacterCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Create a new character for the current user."""
@@ -384,7 +474,7 @@ def create_character(
 def update_character(
     character_id: int,
     payload: CharacterUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Update a character owned by the current user."""
@@ -404,7 +494,7 @@ def update_character(
 def upload_character_sheet(
     character_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Upload a character sheet file."""
@@ -428,7 +518,7 @@ def upload_character_sheet(
 async def upload_character_image(
     character_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Upload a portrait image for a character."""
@@ -447,7 +537,7 @@ async def upload_character_image(
 @app.delete("/characters/{character_id}", status_code=204)
 def delete_character(
     character_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete a character owned by the current user."""
@@ -467,7 +557,7 @@ def delete_character(
 @app.get("/characters/{character_id}/inventory", response_model=list[CharacterInventoryRead])
 def list_character_inventory(
     character_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersViewUser = None,
     db: Session = Depends(get_db),
 ):
     """List inventory for a character."""
@@ -482,7 +572,7 @@ def list_character_inventory(
 def add_inventory_item(
     character_id: int,
     payload: CharacterInventoryCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Add an item to character inventory."""
@@ -500,7 +590,7 @@ def add_inventory_item(
 @app.delete("/inventory/{item_id}", status_code=204)
 def delete_inventory_item(
     item_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete an inventory item."""
@@ -521,7 +611,7 @@ def delete_inventory_item(
 @app.get("/characters/{character_id}/diary", response_model=list[CharacterDiaryRead])
 def list_character_diary(
     character_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersViewUser = None,
     db: Session = Depends(get_db),
 ):
     """List diary entries for a character."""
@@ -536,7 +626,7 @@ def list_character_diary(
 def add_diary_entry(
     character_id: int,
     payload: CharacterDiaryCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CharactersEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Add a diary entry for a character."""
@@ -553,7 +643,7 @@ def add_diary_entry(
 
 # ===== MAP ENDPOINTS =====
 @app.get("/maps", response_model=list[MapRead])
-def list_maps(db: Session = Depends(get_db)):
+def list_maps(current_user: TrackerViewUser = None, db: Session = Depends(get_db)):
     """List all maps."""
     return db.query(Map).filter(Map.is_active == True).order_by(Map.created_at.desc()).all()
 
@@ -563,7 +653,7 @@ async def create_map(
     name: str = Form(...),
     description: str = Form(""),
     file: UploadFile = File(...),
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: AdminPageUser = None,
     db: Session = Depends(get_db),
 ):
     """Upload a new map (admin only)."""
@@ -579,7 +669,7 @@ async def create_map(
 @app.delete("/maps/{map_id}", status_code=204)
 def delete_map(
     map_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: AdminPageUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete a map (admin only)."""
@@ -597,7 +687,7 @@ def delete_map(
 
 # ===== POINT OF INTEREST ENDPOINTS =====
 @app.get("/maps/{map_id}/pois", response_model=list[PointOfInterestRead])
-def list_pois(map_id: int, db: Session = Depends(get_db)):
+def list_pois(map_id: int, current_user: TrackerViewUser = None, db: Session = Depends(get_db)):
     """List all points of interest for a map."""
     return db.query(PointOfInterest).filter(PointOfInterest.map_id == map_id).all()
 
@@ -605,7 +695,7 @@ def list_pois(map_id: int, db: Session = Depends(get_db)):
 @app.post("/pois", response_model=PointOfInterestRead, status_code=201)
 def create_poi(
     payload: PointOfInterestCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Create a point of interest (authenticated users)."""
@@ -619,7 +709,7 @@ def create_poi(
 @app.delete("/pois/{poi_id}", status_code=204)
 def delete_poi(
     poi_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete a point of interest (authenticated users)."""
@@ -635,7 +725,7 @@ def delete_poi(
 def update_poi(
     poi_id: int,
     payload: PointOfInterestUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Update a point of interest (authenticated users)."""
@@ -655,7 +745,7 @@ def update_poi(
 async def upload_poi_image(
     poi_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Upload an image for a POI (authenticated users)."""
@@ -673,7 +763,7 @@ async def upload_poi_image(
 async def upload_event_image(
     event_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Upload an image for a map event (authenticated users)."""
@@ -689,7 +779,7 @@ async def upload_event_image(
 
 # ===== CREATURE ENDPOINTS =====
 @app.get("/creatures", response_model=list[CreatureRead])
-def list_creatures(db: Session = Depends(get_db)):
+def list_creatures(current_user: BestiaryViewUser = None, db: Session = Depends(get_db)):
     """List all creatures in the bestiary."""
     return db.query(Creature).order_by(Creature.name.asc()).all()
 
@@ -697,7 +787,7 @@ def list_creatures(db: Session = Depends(get_db)):
 @app.post("/creatures", response_model=CreatureRead, status_code=201)
 def create_creature(
     payload: CreatureCreate,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: BestiaryEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Add a creature to the bestiary (admin only)."""
@@ -711,7 +801,7 @@ def create_creature(
 @app.delete("/creatures/{creature_id}", status_code=204)
 def delete_creature(
     creature_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: BestiaryEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete a creature (admin only)."""
@@ -724,7 +814,7 @@ def delete_creature(
 
 # ===== ALLY ENDPOINTS =====
 @app.get("/allies", response_model=list[AllyRead])
-def list_allies(db: Session = Depends(get_db)):
+def list_allies(current_user: NpcsViewUser = None, db: Session = Depends(get_db)):
     """List all allies/NPCs."""
     return db.query(Ally).order_by(Ally.name.asc()).all()
 
@@ -732,7 +822,7 @@ def list_allies(db: Session = Depends(get_db)):
 @app.post("/allies", response_model=AllyRead, status_code=201)
 def create_ally(
     payload: AllyCreate,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: NpcsEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Add an ally/NPC (admin only)."""
@@ -746,7 +836,7 @@ def create_ally(
 @app.delete("/allies/{ally_id}", status_code=204)
 def delete_ally(
     ally_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: NpcsEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Delete an ally (admin only)."""
@@ -761,7 +851,7 @@ def delete_ally(
 def set_ally_alignment(
     ally_id: int,
     alignment: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: NpcsEditUser = None,
     db: Session = Depends(get_db),
 ):
     """Set NPC alignment (allied/foe/neutral). Any authenticated user can do this."""
@@ -778,14 +868,14 @@ def set_ally_alignment(
 
 # ===== ORGANIZATION ENDPOINTS =====
 @app.get("/organizations", response_model=list[OrganizationRead])
-def list_organizations(db: Session = Depends(get_db)):
+def list_organizations(current_user: OrganizationsViewUser = None, db: Session = Depends(get_db)):
     return db.query(Organization).order_by(Organization.name.asc()).all()
 
 
 @app.post("/organizations", response_model=OrganizationRead, status_code=201)
 def create_organization(
     payload: OrganizationCreate,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: OrganizationsEditUser = None,
     db: Session = Depends(get_db),
 ):
     org = Organization(**payload.model_dump())
@@ -798,7 +888,7 @@ def create_organization(
 @app.delete("/organizations/{org_id}", status_code=204)
 def delete_organization(
     org_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: OrganizationsEditUser = None,
     db: Session = Depends(get_db),
 ):
     org = db.get(Organization, org_id)
@@ -814,7 +904,7 @@ def delete_organization(
 async def upload_organization_image(
     org_id: int,
     file: UploadFile = File(...),
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: OrganizationsEditUser = None,
     db: Session = Depends(get_db),
 ):
     org = db.get(Organization, org_id)
@@ -833,7 +923,7 @@ async def upload_organization_image(
 async def upload_ally_image(
     ally_id: int,
     file: UploadFile = File(...),
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: NpcsEditUser = None,
     db: Session = Depends(get_db),
 ):
     ally = db.get(Ally, ally_id)
@@ -852,7 +942,7 @@ async def upload_ally_image(
 async def upload_creature_image(
     creature_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: BestiaryEditUser = None,
     db: Session = Depends(get_db),
 ):
     creature = db.get(Creature, creature_id)
@@ -871,7 +961,7 @@ async def upload_creature_image(
 async def upload_diary_image(
     entry_id: int,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: TrackerEditUser = None,
     db: Session = Depends(get_db),
 ):
     entry = db.get(DiaryEntry, entry_id)
@@ -887,44 +977,78 @@ async def upload_diary_image(
 
 
 # ===== USER MANAGEMENT ENDPOINTS (Admin only) =====
-@app.get("/users", response_model=list[UserRead])
+@app.get("/users", response_model=list[UserWithPermissionsRead])
 def list_users(
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: AdminPageUser = None,
     db: Session = Depends(get_db),
 ):
     """List all users (admin only)."""
-    return db.query(User).order_by(User.id.asc()).all()
+    users = db.query(User).order_by(User.id.asc()).all()
+    return [serialize_user_with_permissions(db, user) for user in users]
 
 
-@app.post("/users/{user_id}/make-admin", response_model=UserRead)
-def make_user_admin(
-    user_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+@app.post("/users", response_model=UserWithPermissionsRead, status_code=201)
+def create_user_as_admin(
+    payload: AdminUserCreate,
+    current_admin: AdminPageUser = None,
     db: Session = Depends(get_db),
 ):
-    """Promote a user to admin (admin only)."""
+    existing_user = db.query(User).filter(User.username == payload.username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    user = User(
+        username=payload.username,
+        hashed_password=get_password_hash(payload.password),
+        is_admin=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    assign_page_permissions(db, user.id, DEFAULT_SELF_REGISTER_PERMISSIONS)
+    db.commit()
+    return serialize_user_with_permissions(db, user)
+
+
+@app.put("/users/{user_id}/password", status_code=204)
+def reset_user_password(
+    user_id: int,
+    payload: AdminPasswordReset,
+    current_admin: AdminPageUser = None,
+    db: Session = Depends(get_db),
+):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.is_admin = True
+
+    user.hashed_password = get_password_hash(payload.password)
     db.commit()
-    db.refresh(user)
-    return user
 
 
-@app.post("/users/{user_id}/remove-admin", response_model=UserRead)
-def remove_user_admin(
+@app.put("/users/{user_id}/permissions/{page_key}", response_model=PagePermissionRead)
+def update_user_permission(
     user_id: int,
-    current_admin: User = Depends(get_current_admin_user),
+    page_key: str,
+    payload: PagePermissionUpdate,
+    current_admin: AdminPageUser = None,
     db: Session = Depends(get_db),
 ):
-    """Remove admin privileges from a user (admin only, cannot demote yourself)."""
-    if user_id == current_admin.id:
-        raise HTTPException(status_code=400, detail="Cannot remove your own admin privileges")
+    if page_key not in PAGE_KEYS:
+        raise HTTPException(status_code=404, detail="Page not found")
+
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.is_admin = False
+
+    permissions = ensure_user_permissions(db, user)
+    permission = next(item for item in permissions if item.page_key == page_key)
+    if user.id == current_admin.id and page_key == "admin":
+        raise HTTPException(status_code=400, detail="Cannot change your own admin page access")
+
+    permission.permission_level = payload.permission_level
     db.commit()
-    db.refresh(user)
-    return user
+    db.refresh(permission)
+    return permission
+
+
