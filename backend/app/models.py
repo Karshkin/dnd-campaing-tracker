@@ -1,7 +1,23 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+PAGE_KEYS = (
+    "tracker",
+    "characters",
+    "bestiary",
+    "organizations",
+    "npcs",
+    "admin",
+)
+
+PERMISSION_LEVELS = (
+    "none",
+    "view",
+    "edit",
+    "admin",
+)
 
 
 class Base(DeclarativeBase):
@@ -55,6 +71,20 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Integer, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class PagePermission(Base):
+    __tablename__ = "page_permissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "page_key", name="uq_page_permissions_user_page"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    page_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    permission_level: Mapped[str] = mapped_column(String(20), default="none", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class Map(Base):

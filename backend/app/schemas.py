@@ -87,6 +87,34 @@ class UserRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PagePermissionRead(BaseModel):
+    page_key: str
+    permission_level: Literal["none", "view", "edit", "admin"]
+
+    model_config = {"from_attributes": True}
+
+
+class PagePermissionUpdate(BaseModel):
+    permission_level: Literal["none", "view", "edit", "admin"]
+
+
+class UserWithPermissionsRead(UserRead):
+    permissions: list[PagePermissionRead]
+
+
+class CurrentUserRead(UserRead):
+    permissions: list[PagePermissionRead]
+
+
+class AdminUserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8)
+
+
+class AdminPasswordReset(BaseModel):
+    password: str = Field(min_length=8)
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str

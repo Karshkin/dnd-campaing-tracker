@@ -3,6 +3,9 @@ import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
+const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
+const PERMISSION_RANK = { none: 0, view: 1, edit: 2, admin: 3 };
 
 // ===== AUTH HELPERS =====
 function getAuthToken() {
@@ -78,6 +81,10 @@ function useAuthenticatedApiData(path, defaultValue, isAuthenticated) {
   }, [refresh]);
 
   return [data, refresh];
+}
+
+function hasLevel(actual, required) {
+  return (PERMISSION_RANK[actual] ?? 0) >= (PERMISSION_RANK[required] ?? 0);
 }
 
 // ===== MAP COMPONENT =====
@@ -285,19 +292,21 @@ function App() {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(!!getAuthToken());
   const [isAdmin, setIsAdminState] = useState(getIsAdmin());
+  const [currentUser, setCurrentUser] = useState(null);
+  const [pagePermissions, setPagePermissions] = useState({});
   const [loginData, setLoginData] = useState({ username: "", password: "" });
   const [registerData, setRegisterData] = useState({ username: "", password: "", confirmPassword: "" });
   const [loginError, setLoginError] = useState("");
   const [registerError, setRegisterError] = useState("");
 
   // Campaign/Public data
-  const [events, refreshEvents] = useApiData("/events", []);
-  const [resources, refreshResources] = useApiData("/resources", []);
-  const [diaryEntries, refreshDiaryEntries] = useApiData("/diary", []);
-  const [creatures, refreshCreatures] = useApiData("/creatures", []);
-  const [allies, refreshAllies] = useApiData("/allies", []);
-  const [maps, refreshMaps] = useApiData("/maps", []);
-  const [organizations, refreshOrganizations] = useApiData("/organizations", []);
+  const [events, refreshEvents] = useAuthenticatedApiData("/events", [], isAuthenticated);
+  const [resources, refreshResources] = useAuthenticatedApiData("/resources", [], isAuthenticated);
+  const [diaryEntries, refreshDiaryEntries] = useAuthenticatedApiData("/diary", [], isAuthenticated);
+  const [creatures, refreshCreatures] = useAuthenticatedApiData("/creatures", [], isAuthenticated);
+  const [allies, refreshAllies] = useAuthenticatedApiData("/allies", [], isAuthenticated);
+  const [maps, refreshMaps] = useAuthenticatedApiData("/maps", [], isAuthenticated);
+  const [organizations, refreshOrganizations] = useAuthenticatedApiData("/organizations", [], isAuthenticated);
   const [orgDraft, setOrgDraft] = useState({ name: "", description: "" });
   const [orgImageFile, setOrgImageFile] = useState(null);
   const [selectedOrg, setSelectedOrg] = useState(null);
@@ -329,6 +338,9 @@ function App() {
 
   // Admin: users list
   const [users, setUsers] = useState([]);
+  const [newUserData, setNewUserData] = useState({ username: "", password: "" });
+  const [userManagementError, setUserManagementError] = useState("");
+  const [passwordResetDrafts, setPasswordResetDrafts] = useState({});
 
   // User-specific data
   const [characters, refreshCharacters] = useAuthenticatedApiData("/characters", [], isAuthenticated);
@@ -364,6 +376,13 @@ function App() {
   const [creatureError, setCreatureError] = useState("");
   const [allyError, setAllyError] = useState("");
 
+  const hasPagePermission = (pageKey, requiredLevel = "view") => {
+    const actual = pagePermissions[pageKey] ?? "none";
+    return hasLevel(actual, requiredLevel);
+  };
+  const hasTrackerMap = maps.length > 0;
+  const canManageAdmin = hasPagePermission("admin", "admin");
+
   // Helper: read error messages
   const readErrorMessage = async (response, fallbackText) => {
     try {
@@ -382,8 +401,14 @@ function App() {
       });
       if (response.ok) {
         const userData = await response.json();
-        setIsAdmin(userData.is_admin);
-        setIsAdminState(userData.is_admin);
+        const permissionMap = Object.fromEntries(
+          (userData.permissions ?? []).map((item) => [item.page_key, item.permission_level])
+        );
+        setCurrentUser(userData);
+        setPagePermissions(permissionMap);
+        const hasAdminAccess = hasLevel(permissionMap.admin ?? "none", "admin");
+        setIsAdmin(hasAdminAccess);
+        setIsAdminState(hasAdminAccess);
         return true;
       }
       return false;
@@ -459,9 +484,58 @@ function App() {
     clearAuthToken();
     setIsAuthenticated(false);
     setIsAdminState(false);
+    setCurrentUser(null);
+    setPagePermissions({});
+    setUsers([]);
     setSelectedCharacter(null);
     navigate("tracker");
   };
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setCurrentUser(null);
+      setPagePermissions({});
+      return;
+    }
+    fetchUserInfo(token).then((ok) => {
+      if (!ok) {
+        logout();
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const requiredPermissions = {
+      tracker: ["tracker", "view"],
+      characters: ["characters", "view"],
+      bestiary: ["bestiary", "view"],
+      organizations: ["organizations", "view"],
+      npcs: ["npcs", "view"],
+      admin: ["admin", "admin"],
+    };
+
+    if (["login", "register"].includes(activeView)) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      if (activeView !== "tracker") {
+        navigate("login");
+      }
+      return;
+    }
+
+    const config = requiredPermissions[activeView];
+    if (!config) {
+      return;
+    }
+
+    const [pageKey, level] = config;
+    if (!hasPagePermission(pageKey, level)) {
+      navigate("tracker");
+    }
+  }, [activeView, isAuthenticated, pagePermissions]);
 
   // Campaign: Submit Event
   const submitEvent = async (event) => {
@@ -482,7 +556,7 @@ function App() {
       if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
       return;
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       logout();
       setEventError(t('auth.sessionExpired'));
       return;
@@ -540,7 +614,7 @@ function App() {
       refreshResources();
       return;
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       logout();
       setResourceError(t('auth.sessionExpired'));
       return;
@@ -577,7 +651,7 @@ function App() {
       refreshDiaryEntries();
       return;
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       logout();
       setDiaryError(t('auth.sessionExpired'));
       return;
@@ -1168,20 +1242,93 @@ function App() {
     });
     if (response.ok) {
       setUsers(await response.json());
+      return;
     }
+    setUserManagementError(await readErrorMessage(response, t('admin.loadUsersError')));
   };
 
-  // Users: Toggle admin
-  const toggleAdmin = async (userId, currentlyAdmin) => {
+  const createUser = async (event) => {
+    event.preventDefault();
+    setUserManagementError("");
     const token = getAuthToken();
-    const endpoint = currentlyAdmin ? "remove-admin" : "make-admin";
-    const response = await fetch(`${API_URL}/users/${userId}/${endpoint}`, {
+    const response = await fetch(`${API_URL}/users`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(newUserData),
     });
+
     if (response.ok) {
+      setNewUserData({ username: "", password: "" });
       loadUsers();
+      return;
     }
+    setUserManagementError(await readErrorMessage(response, t('admin.createUserError')));
+  };
+
+  const updatePermission = async (userId, pageKey, permissionLevel) => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_URL}/users/${userId}/permissions/${pageKey}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ permission_level: permissionLevel }),
+    });
+
+    if (response.ok) {
+      const updatedPermission = await response.json();
+      setUsers((currentUsers) => currentUsers.map((user) => {
+        if (user.id !== userId) {
+          return user;
+        }
+
+        return {
+          ...user,
+          permissions: (user.permissions ?? []).map((permission) => (
+            permission.page_key === pageKey ? updatedPermission : permission
+          )),
+        };
+      }));
+
+      if (currentUser?.id === userId) {
+        const nextPermissions = { ...pagePermissions, [pageKey]: permissionLevel };
+        setPagePermissions(nextPermissions);
+        const hasAdminAccess = hasLevel(nextPermissions.admin ?? "none", "admin");
+        setIsAdmin(hasAdminAccess);
+        setIsAdminState(hasAdminAccess);
+      }
+      return;
+    }
+
+    setUserManagementError(await readErrorMessage(response, t('admin.updatePermissionError')));
+  };
+
+  const resetUserPassword = async (userId) => {
+    const password = passwordResetDrafts[userId] ?? "";
+    if (!password) {
+      return;
+    }
+
+    const token = getAuthToken();
+    const response = await fetch(`${API_URL}/users/${userId}/password`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    if (response.ok) {
+      setPasswordResetDrafts((drafts) => ({ ...drafts, [userId]: "" }));
+      return;
+    }
+
+    setUserManagementError(await readErrorMessage(response, t('admin.resetPasswordError')));
   };
 
   return (
@@ -1197,32 +1344,40 @@ function App() {
           >
             {lang.startsWith('es') ? '🇬🇧' : '🇪🇸'}
           </button>
-          <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
-            {t('nav.chronicle')}
-          </button>
+          {(!isAuthenticated || hasPagePermission("tracker", "view")) && (
+            <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
+              {t('nav.chronicle')}
+            </button>
+          )}
           {isAuthenticated && (
             <>
-              <button type="button" onClick={() => navigate("characters")} className={activeView === "characters" ? "active" : ""}>
-                {t('nav.characters')}
-              </button>
-              <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" ? "active" : ""}>
-                {t('nav.bestiary')}
-              </button>
-              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
-              <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
-                {t('nav.npcs')}
-              </button>
+              {hasPagePermission("characters", "view") && (
+                <button type="button" onClick={() => navigate("characters")} className={activeView === "characters" ? "active" : ""}>
+                  {t('nav.characters')}
+                </button>
+              )}
+              {hasPagePermission("bestiary", "view") && (
+                <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" ? "active" : ""}>
+                  {t('nav.bestiary')}
+                </button>
+              )}
+              {hasPagePermission("organizations", "view") && (
+                <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
+              )}
+              {hasPagePermission("npcs", "view") && (
+                <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
+                  {t('nav.npcs')}
+                </button>
+              )}
+              {hasPagePermission("admin", "admin") && (
+                <button type="button" onClick={() => navigate("admin")} className={activeView === "admin" ? "active" : ""}>
+                  {t('nav.admin')}
+                </button>
+              )}
             </>
           )}
           {!isAuthenticated && (
             <>
-              <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" ? "active" : ""}>
-                {t('nav.bestiary')}
-              </button>
-              <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
-              <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
-                {t('nav.npcs')}
-              </button>
               <button type="button" onClick={() => navigate("login")} className={activeView === "login" ? "active" : ""}>
                 {t('nav.login')}
               </button>
@@ -1320,150 +1475,187 @@ function App() {
       {activeView === "tracker" ? (
         <section className="grid">
           <article className="card wide">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h2 style={{ margin: 0 }}>
-                {trackerMap ? trackerMap.name : t('tracker.worldMap')}
-              </h2>
-              {maps.length > 1 && (
-                <select
-                  value={trackerMap?.id ?? ""}
-                  onChange={(e) => {
-                    const map = maps.find((m) => m.id === Number(e.target.value));
-                    if (map) {
-                      setTrackerMap(map);
-                      loadTrackerMapPOIs(map.id);
-                    }
+            {!hasTrackerMap ? (
+              <div
+                style={{
+                  padding: "2rem 1rem",
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: "36rem",
+                    width: "100%",
+                    padding: "1.5rem 1.25rem",
+                    textAlign: "center",
+                    background: "linear-gradient(180deg, #fbf1df 0%, #f2dfbe 100%)",
+                    border: "2px solid #8b4513",
+                    borderRadius: "10px",
+                    boxShadow: "0 10px 24px rgba(77, 46, 18, 0.16)",
                   }}
                 >
-                  {maps.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {isAuthenticated && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
-            <MapView
-              events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
-              onMapClick={isAuthenticated ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
-              mapImageUrl={trackerMap ? `${API_URL}/${trackerMap.file_path}` : null}
-              tempMarker={trackerMarkerDraft}
-            />
-
-            {isAuthenticated && trackerMarkerDraft && (
-              <form onSubmit={submitTrackerMarker} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
-                <p style={{ margin: 0 }}><strong>{t('tracker.newMarker')}</strong> {t('tracker.at')} {trackerMarkerDraft.latitude.toFixed(1)}%, {trackerMarkerDraft.longitude.toFixed(1)}%</p>
-                <input
-                  value={trackerMarkerForm.title}
-                  onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder={t('common.title')}
-                  required
-                />
-                <input
-                  value={trackerMarkerForm.description}
-                  onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder={t('common.descriptionOptional')}
-                />
-                <select value={trackerMarkerForm.kind} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, kind: e.target.value }))}>
-                  <option value="poi">{t('tracker.poi')}</option>
-                  <option value="event">{t('tracker.eventMarker')}</option>
-                </select>
-                {trackerMarkerForm.kind === "poi" ? (
-                  <select value={trackerMarkerForm.poi_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, poi_type: e.target.value }))}>
-                    <option value="location">{t('tracker.location')}</option>
-                    <option value="city">{t('tracker.city')}</option>
-                    <option value="dungeon">{t('tracker.dungeon')}</option>
-                    <option value="landmark">{t('tracker.landmark')}</option>
-                    <option value="quest">{t('tracker.quest')}</option>
-                  </select>
-                ) : (
-                  <select value={trackerMarkerForm.event_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, event_type: e.target.value }))}>
-                    <option value="event">{t('tracker.event')}</option>
-                    <option value="quest">{t('tracker.quest')}</option>
-                  </select>
-                )}
-                <label style={{ fontSize: "0.9rem" }}>{t('common.imageOptional')}:
-                  <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setTrackerMarkerImageFile(e.target.files[0] || null)} />
-                </label>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button type="submit">{t('tracker.addMarker')}</button>
-                  <button type="button" onClick={() => setTrackerMarkerDraft(null)}>{t('common.cancel')}</button>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🗺️</div>
+                  <h2 style={{ margin: "0 0 0.75rem", color: "#5d2f12" }}>{t('tracker.noMapTitle')}</h2>
+                  <p style={{ margin: "0 0 0.5rem", color: "#5d3a1a", lineHeight: 1.5 }}>{t('tracker.noMapMessage')}</p>
+                  <p style={{ margin: 0, color: "#7a5a33", lineHeight: 1.5 }}>
+                    {canManageAdmin ? t('tracker.noMapAdminHint') : t('tracker.noMapUserHint')}
+                  </p>
+                  {canManageAdmin ? (
+                    <button type="button" onClick={() => navigate("admin")} style={{ marginTop: "1rem" }}>
+                      {t('nav.admin')}
+                    </button>
+                  ) : null}
                 </div>
-              </form>
-            )}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                  <h2 style={{ margin: 0 }}>
+                    {trackerMap ? trackerMap.name : t('tracker.worldMap')}
+                  </h2>
+                  {maps.length > 1 && (
+                    <select
+                      value={trackerMap?.id ?? ""}
+                      onChange={(e) => {
+                        const map = maps.find((m) => m.id === Number(e.target.value));
+                        if (map) {
+                          setTrackerMap(map);
+                          loadTrackerMapPOIs(map.id);
+                        }
+                      }}
+                    >
+                      {maps.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
+                <MapView
+                  events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
+                  onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
+                  mapImageUrl={trackerMap ? `${API_URL}/${trackerMap.file_path}` : null}
+                  tempMarker={trackerMarkerDraft}
+                />
 
-            {isAuthenticated && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
-              <details style={{ marginTop: "1rem" }}>
-                <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
-                <ul style={{ marginTop: "0.5rem" }}>
-                  {trackerMapPOIs.map((poi) => (
-                    <li key={`poi-${poi.id}`}>
-                      {editingPoi?.id === poi.id ? (
-                        <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
-                          <select value={editingPoi.poi_type} onChange={(e) => setEditingPoi((p) => ({ ...p, poi_type: e.target.value }))}>
-                            <option value="location">{t('tracker.location')}</option>
-                            <option value="city">{t('tracker.city')}</option>
-                            <option value="dungeon">{t('tracker.dungeon')}</option>
-                            <option value="landmark">{t('tracker.landmark')}</option>
-                            <option value="quest">{t('tracker.quest')}</option>
-                          </select>
-                          <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
-                          </label>
-                          {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
-                          <button type="submit">{t('common.save')}</button>
-                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
-                        </form>
-                      ) : (
-                        <div className="row">
-                          <span><strong>{poi.title}</strong> ({poi.poi_type}){poi.description && ` — ${poi.description}`}</span>
-                          <div style={{ display: "flex", gap: "0.25rem" }}>
-                            <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>{t('common.edit')}</button>
-                            <button type="button" onClick={() => deleteTrackerPOI(poi.id)}>{t('common.delete')}</button>
-                          </div>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                  {events.filter((e) => e.map_id === trackerMap.id).map((ev) => (
-                    <li key={`ev-${ev.id}`}>
-                      {editingEvent?.id === ev.id ? (
-                        <form onSubmit={updateEvent} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          <input value={editingEvent.title} onChange={(e) => setEditingEvent((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingEvent.description} onChange={(e) => setEditingEvent((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
-                          <select value={editingEvent.event_type} onChange={(e) => setEditingEvent((p) => ({ ...p, event_type: e.target.value }))}>
-                            <option value="event">{t('tracker.event')}</option>
-                            <option value="quest">{t('tracker.quest')}</option>
-                          </select>
-                          <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingEvent.image_path ? t('common.replaceImage') : t('common.addImage')}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingEventImageFile(e.target.files[0] || null)} />
-                          </label>
-                          {editingEventImageFile && <small style={{ color: "#5d3a1a" }}>{editingEventImageFile.name}</small>}
-                          <button type="submit">{t('common.save')}</button>
-                          <button type="button" onClick={() => { setEditingEvent(null); setEditingEventImageFile(null); }}>{t('common.cancel')}</button>
-                        </form>
-                      ) : (
-                        <div className="row">
-                          <span><strong>{ev.title}</strong> ({ev.event_type})</span>
-                          <div style={{ display: "flex", gap: "0.25rem" }}>
-                            <button type="button" onClick={() => setEditingEvent({ id: ev.id, title: ev.title, description: ev.description, event_type: ev.event_type, latitude: ev.latitude, longitude: ev.longitude, map_id: ev.map_id, image_path: ev.image_path })}>{t('common.edit')}</button>
-                            <button type="button" onClick={() => deleteEvent(ev.id)}>{t('common.delete')}</button>
-                          </div>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </details>
+                {hasPagePermission("tracker", "edit") && trackerMarkerDraft && (
+                  <form onSubmit={submitTrackerMarker} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
+                    <p style={{ margin: 0 }}><strong>{t('tracker.newMarker')}</strong> {t('tracker.at')} {trackerMarkerDraft.latitude.toFixed(1)}%, {trackerMarkerDraft.longitude.toFixed(1)}%</p>
+                    <input
+                      value={trackerMarkerForm.title}
+                      onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder={t('common.title')}
+                      required
+                    />
+                    <input
+                      value={trackerMarkerForm.description}
+                      onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder={t('common.descriptionOptional')}
+                    />
+                    <select value={trackerMarkerForm.kind} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, kind: e.target.value }))}>
+                      <option value="poi">{t('tracker.poi')}</option>
+                      <option value="event">{t('tracker.eventMarker')}</option>
+                    </select>
+                    {trackerMarkerForm.kind === "poi" ? (
+                      <select value={trackerMarkerForm.poi_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, poi_type: e.target.value }))}>
+                        <option value="location">{t('tracker.location')}</option>
+                        <option value="city">{t('tracker.city')}</option>
+                        <option value="dungeon">{t('tracker.dungeon')}</option>
+                        <option value="landmark">{t('tracker.landmark')}</option>
+                        <option value="quest">{t('tracker.quest')}</option>
+                      </select>
+                    ) : (
+                      <select value={trackerMarkerForm.event_type} onChange={(e) => setTrackerMarkerForm((f) => ({ ...f, event_type: e.target.value }))}>
+                        <option value="event">{t('tracker.event')}</option>
+                        <option value="quest">{t('tracker.quest')}</option>
+                      </select>
+                    )}
+                    <label style={{ fontSize: "0.9rem" }}>{t('common.imageOptional')}:
+                      <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setTrackerMarkerImageFile(e.target.files[0] || null)} />
+                    </label>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button type="submit">{t('tracker.addMarker')}</button>
+                      <button type="button" onClick={() => setTrackerMarkerDraft(null)}>{t('common.cancel')}</button>
+                    </div>
+                  </form>
+                )}
+
+                {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
+                  <details style={{ marginTop: "1rem" }}>
+                    <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
+                    <ul style={{ marginTop: "0.5rem" }}>
+                      {trackerMapPOIs.map((poi) => (
+                        <li key={`poi-${poi.id}`}>
+                          {editingPoi?.id === poi.id ? (
+                            <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                              <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
+                              <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
+                              <select value={editingPoi.poi_type} onChange={(e) => setEditingPoi((p) => ({ ...p, poi_type: e.target.value }))}>
+                                <option value="location">{t('tracker.location')}</option>
+                                <option value="city">{t('tracker.city')}</option>
+                                <option value="dungeon">{t('tracker.dungeon')}</option>
+                                <option value="landmark">{t('tracker.landmark')}</option>
+                                <option value="quest">{t('tracker.quest')}</option>
+                              </select>
+                              <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
+                                🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
+                                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
+                              </label>
+                              {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
+                              <button type="submit">{t('common.save')}</button>
+                              <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
+                            </form>
+                          ) : (
+                            <div className="row">
+                              <span><strong>{poi.title}</strong> ({poi.poi_type}){poi.description && ` — ${poi.description}`}</span>
+                              <div style={{ display: "flex", gap: "0.25rem" }}>
+                                <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>{t('common.edit')}</button>
+                                <button type="button" onClick={() => deleteTrackerPOI(poi.id)}>{t('common.delete')}</button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                      {events.filter((e) => e.map_id === trackerMap.id).map((ev) => (
+                        <li key={`ev-${ev.id}`}>
+                          {editingEvent?.id === ev.id ? (
+                            <form onSubmit={updateEvent} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                              <input value={editingEvent.title} onChange={(e) => setEditingEvent((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
+                              <input value={editingEvent.description} onChange={(e) => setEditingEvent((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
+                              <select value={editingEvent.event_type} onChange={(e) => setEditingEvent((p) => ({ ...p, event_type: e.target.value }))}>
+                                <option value="event">{t('tracker.event')}</option>
+                                <option value="quest">{t('tracker.quest')}</option>
+                              </select>
+                              <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
+                                🖼️ {editingEvent.image_path ? t('common.replaceImage') : t('common.addImage')}
+                                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingEventImageFile(e.target.files[0] || null)} />
+                              </label>
+                              {editingEventImageFile && <small style={{ color: "#5d3a1a" }}>{editingEventImageFile.name}</small>}
+                              <button type="submit">{t('common.save')}</button>
+                              <button type="button" onClick={() => { setEditingEvent(null); setEditingEventImageFile(null); }}>{t('common.cancel')}</button>
+                            </form>
+                          ) : (
+                            <div className="row">
+                              <span><strong>{ev.title}</strong> ({ev.event_type})</span>
+                              <div style={{ display: "flex", gap: "0.25rem" }}>
+                                <button type="button" onClick={() => setEditingEvent({ id: ev.id, title: ev.title, description: ev.description, event_type: ev.event_type, latitude: ev.latitude, longitude: ev.longitude, map_id: ev.map_id, image_path: ev.image_path })}>{t('common.edit')}</button>
+                                <button type="button" onClick={() => deleteEvent(ev.id)}>{t('common.delete')}</button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </>
             )}
           </article>
 
           <article className="card">
             <h2>{t('resources.title')}</h2>
-            {isAuthenticated && (
+            {hasPagePermission("tracker", "edit") && (
               <form onSubmit={submitResource} className="form" style={{ marginBottom: "1rem" }}>
                 <input
                   value={resourceDraft.name}
@@ -1504,20 +1696,20 @@ function App() {
                       style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513" }}
                       title={t('common.clickToView')}
                     />
-                  ) : isAuthenticated ? (
+                  ) : hasPagePermission("tracker", "edit") ? (
                     <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513", whiteSpace: "nowrap" }} title={t('common.addImage')}>
                       🖼️
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   ) : null}
                   <span style={{ flexGrow: 1 }}><strong>{item.name}</strong>: {item.quantity}{item.notes ? ` (${item.notes})` : ""}</span>
-                  {isAuthenticated && item.image_path && (
+                  {hasPagePermission("tracker", "edit") && item.image_path && (
                     <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513" }} title={t('common.replaceImage')}>
                       🔄
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   )}
-                  {isAuthenticated && <button type="button" onClick={() => deleteResource(item.id)}>{t('common.delete')}</button>}
+                  {hasPagePermission("tracker", "edit") && <button type="button" onClick={() => deleteResource(item.id)}>{t('common.delete')}</button>}
                 </li>
               ))}
             </ul>
@@ -1534,7 +1726,7 @@ function App() {
 
           <article className="card">
             <h2>{t('diary.title')}</h2>
-            {isAuthenticated && (
+            {hasPagePermission("tracker", "edit") && (
               <form onSubmit={submitDiary} className="form" style={{ marginBottom: "1rem" }}>
                 <input
                   value={diaryDraft.title}
@@ -1564,13 +1756,13 @@ function App() {
                   <div className="row" style={{ alignItems: "flex-start" }}>
                     <strong>{entry.title}</strong>
                     <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                      {isAuthenticated && (
+                      {hasPagePermission("tracker", "edit") && (
                         <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
                           🖼️
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
                         </label>
                       )}
-                      {isAuthenticated && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
+                      {hasPagePermission("tracker", "edit") && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
                     </div>
                   </div>
                   <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
@@ -1597,13 +1789,14 @@ function App() {
       ) : null}
 
       {/* CHARACTERS VIEW */}
-      {activeView === "characters" && isAuthenticated ? (
+      {activeView === "characters" && isAuthenticated && hasPagePermission("characters", "view") ? (
         <section className="grid">
           <article className="card wide">
             <h2>{t('characters.title')}</h2>
             {!selectedCharacter ? (
               <>
-                <form onSubmit={submitCharacter} className="form">
+                {hasPagePermission("characters", "edit") && (
+                  <form onSubmit={submitCharacter} className="form">
                   <input
                     value={characterDraft.name}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, name: e.target.value }))}
@@ -1648,8 +1841,9 @@ function App() {
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
                   </label>
                   <button type="submit">{t('characters.create')}</button>
-                </form>
-                {characterError ? <p className="error">{characterError}</p> : null}
+                  </form>
+                )}
+                {hasPagePermission("characters", "edit") && characterError ? <p className="error">{characterError}</p> : null}
 
                 <h3>{t('characters.yourCharacters')}</h3>
                 <ul>
@@ -1683,9 +1877,11 @@ function App() {
                             <button type="button">{t('characters.sheet')}</button>
                           </a>
                         )}
-                        <button type="button" onClick={() => deleteCharacter(char.id)}>
-                          {t('common.delete')}
-                        </button>
+                        {hasPagePermission("characters", "edit") && (
+                          <button type="button" onClick={() => deleteCharacter(char.id)}>
+                            {t('common.delete')}
+                          </button>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -1707,16 +1903,22 @@ function App() {
                           style={{ width: "96px", height: "96px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "3px solid #8b4513" }}
                           title={t('common.clickToView')}
                         />
-                        <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title={t('common.replaceImage')}>
-                          {t('common.replace')}
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
-                        </label>
+                        {hasPagePermission("characters", "edit") && (
+                          <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title={t('common.replaceImage')}>
+                            {t('common.replace')}
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
+                          </label>
+                        )}
                       </div>
                     ) : (
-                      <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
-                        🧙<span>{t('characters.addPortraitShort')}</span>
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
-                      </label>
+                      hasPagePermission("characters", "edit") ? (
+                        <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
+                          🧙<span>{t('characters.addPortraitShort')}</span>
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
+                        </label>
+                      ) : (
+                        <span style={{ width: "96px", height: "96px", borderRadius: "50%", border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem" }}>🧙</span>
+                      )
                     )}
                   </div>
                   <div>
@@ -1732,15 +1934,20 @@ function App() {
                   </div>
                 </div>
 
-                <h4>{t('characters.uploadSheet')}</h4>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => e.target.files[0] && uploadCharacterSheet(selectedCharacter.id, e.target.files[0])}
-                />
+                {hasPagePermission("characters", "edit") && (
+                  <>
+                    <h4>{t('characters.uploadSheet')}</h4>
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => e.target.files[0] && uploadCharacterSheet(selectedCharacter.id, e.target.files[0])}
+                    />
+                  </>
+                )}
 
                 <h4>{t('characters.inventory')}</h4>
-                <form onSubmit={addInventoryItem} className="form">
+                {hasPagePermission("characters", "edit") && (
+                  <form onSubmit={addInventoryItem} className="form">
                   <input
                     value={inventoryDraft.item_name}
                     onChange={(e) => setInventoryDraft((old) => ({ ...old, item_name: e.target.value }))}
@@ -1760,7 +1967,8 @@ function App() {
                     placeholder={t('common.description')}
                   />
                   <button type="submit">{t('characters.addItem')}</button>
-                </form>
+                  </form>
+                )}
                 <ul>
                   {characterInventory.map((item) => (
                     <li key={item.id} className="row">
@@ -1768,15 +1976,18 @@ function App() {
                         <strong>{item.item_name}</strong> x{item.quantity}
                         {item.description ? ` - ${item.description}` : ""}
                       </span>
-                      <button type="button" onClick={() => deleteInventoryItem(item.id)}>
-                        {t('common.delete')}
-                      </button>
+                      {hasPagePermission("characters", "edit") && (
+                        <button type="button" onClick={() => deleteInventoryItem(item.id)}>
+                          {t('common.delete')}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
 
                 <h4>{t('characters.diary')}</h4>
-                <form onSubmit={addCharacterDiaryEntry} className="form">
+                {hasPagePermission("characters", "edit") && (
+                  <form onSubmit={addCharacterDiaryEntry} className="form">
                   <input
                     value={charDiaryDraft.title}
                     onChange={(e) => setCharDiaryDraft((old) => ({ ...old, title: e.target.value }))}
@@ -1791,7 +2002,8 @@ function App() {
                     required
                   />
                   <button type="submit">{t('diary.add')}</button>
-                </form>
+                  </form>
+                )}
                 <ul>
                   {characterDiary.map((entry) => (
                     <li key={entry.id}>
@@ -1824,7 +2036,7 @@ function App() {
                       style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
                       title={t('common.clickToView')}
                     />
-                  ) : isAdmin ? (
+                  ) : hasPagePermission("bestiary", "edit") ? (
                     <label style={{ width: "64px", height: "64px", border: "2px dashed #8b4513", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.8rem" }} title={t('common.addImage')}>
                       🐉
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
@@ -1836,13 +2048,13 @@ function App() {
                     <div className="row">
                       <strong>{creature.name}</strong>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
-                        {isAdmin && creature.image_path && (
+                        {hasPagePermission("bestiary", "edit") && creature.image_path && (
                           <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
                             🔄
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
                           </label>
                         )}
-                        {isAdmin && (
+                        {hasPagePermission("bestiary", "edit") && (
                           <button type="button" onClick={() => deleteCreature(creature.id)}>{t('common.delete')}</button>
                         )}
                       </div>
@@ -1921,7 +2133,7 @@ function App() {
                       <strong style={{ display: "block", marginBottom: "0.2rem", fontFamily: "'Cinzel', serif", color: "var(--sienna-dark)" }}>{org.name}</strong>
                       {org.description && <p style={{ margin: "0 0 0.4rem", fontSize: "0.82rem", color: "var(--ink-light)", lineHeight: 1.3 }}>{org.description}</p>}
                       <small style={{ color: "var(--gold-dark)" }}>{memberCount} {memberCount !== 1 ? t('organizations.members') : t('organizations.member')}</small>
-                      {isAdmin && (
+                      {hasPagePermission("organizations", "edit") && (
                         <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }} onClick={(e) => e.stopPropagation()}>
                           <label style={{ fontSize: "0.78rem", cursor: "pointer" }} title={t('common.replaceImage')}>
                             {t('common.imageLabel')}
@@ -2007,7 +2219,7 @@ function App() {
                         style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
                         title={t('common.clickToView')}
                       />
-                    ) : isAdmin ? (
+                     ) : hasPagePermission("npcs", "edit") ? (
                       <label style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px dashed #8b4513", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.4rem" }} title={t('npcs.addPortrait')}>
                         👤
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
@@ -2031,16 +2243,16 @@ function App() {
                           {ally.alignment === "neutral" && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "#666", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>{t('npcs.neutral')}</span>}
                         </div>
                         <div style={{ display: "flex", gap: "0.25rem" }}>
-                          {isAdmin && ally.image_path && (
+                          {hasPagePermission("npcs", "edit") && ally.image_path && (
                             <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
                               🔄
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
                             </label>
                           )}
-                          {isAdmin && <button type="button" onClick={() => deleteAlly(ally.id)}>{t('common.delete')}</button>}
+                          {hasPagePermission("npcs", "edit") && <button type="button" onClick={() => deleteAlly(ally.id)}>{t('common.delete')}</button>}
                         </div>
                       </div>
-                      {isAuthenticated && (
+                      {hasPagePermission("npcs", "edit") && (
                         <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.4rem" }}>
                           <button
                             type="button"
@@ -2079,7 +2291,7 @@ function App() {
       )}
 
       {/* ADMIN VIEW (/admin) */}
-      {activeView === "admin" && isAuthenticated && isAdmin ? (
+      {activeView === "admin" && isAuthenticated && hasPagePermission("admin", "admin") ? (
         <section className="grid">
           <article className="card wide">
             <h2>{t('admin.manageMaps')}</h2>
@@ -2355,32 +2567,86 @@ function App() {
             {allyError ? <p className="error">{allyError}</p> : null}
           </article>
 
-          <article className="card wide">
-            <h2>{t('admin.userManagement')}</h2>
-            <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
-              {t('admin.loadUsers')}
-            </button>
-            {users.length > 0 && (
-              <ul>
-                {users.map((u) => (
-                  <li key={u.id} className="row">
-                    <span>
-                      <strong>{u.username}</strong>
-                      {u.is_admin ? (
-                        <span style={{ marginLeft: "0.5rem", color: "#8b4513", fontWeight: "bold" }}>{t('admin.adminBadge')}</span>
-                      ) : (
-                        <span style={{ marginLeft: "0.5rem", color: "#666" }}>{t('admin.player')}</span>
-                      )}
-                    </span>
-                    <button type="button" onClick={() => toggleAdmin(u.id, u.is_admin)}>
-                      {u.is_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {users.length === 0 && <p><small>{t('admin.loadUsersHint')}</small></p>}
-          </article>
+            <article className="card wide">
+              <h2>{t('admin.userManagement')}</h2>
+              <form onSubmit={createUser} className="form">
+                <input
+                  value={newUserData.username}
+                  onChange={(event) => setNewUserData((old) => ({ ...old, username: event.target.value }))}
+                  placeholder={t('auth.usernamePlaceholder')}
+                  required
+                />
+                <input
+                  type="password"
+                  value={newUserData.password}
+                  onChange={(event) => setNewUserData((old) => ({ ...old, password: event.target.value }))}
+                  placeholder={t('auth.passwordPlaceholder')}
+                  required
+                />
+                <button type="submit">{t('admin.createUser')}</button>
+              </form>
+              <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
+                {t('admin.refreshUsers')}
+              </button>
+              {users.length > 0 && (
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t('auth.username')}</th>
+                        {PAGE_KEYS.map((pageKey) => (
+                          <th key={pageKey}>{t(`admin.pageNames.${pageKey}`)}</th>
+                        ))}
+                        <th>{t('admin.resetPassword')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => {
+                        const permissionMap = Object.fromEntries((user.permissions ?? []).map((item) => [item.page_key, item.permission_level]));
+
+                        return (
+                          <tr key={user.id}>
+                            <td>
+                              <strong>{user.username}</strong>
+                              {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "#8b4513" }}>{t('admin.currentUser')}</span> : null}
+                            </td>
+                            {PAGE_KEYS.map((pageKey) => {
+                              const isOwnAdminPermission = user.id === currentUser?.id && pageKey === "admin";
+                              return (
+                                <td key={pageKey}>
+                                  <select
+                                    value={permissionMap[pageKey] ?? "none"}
+                                    disabled={isOwnAdminPermission}
+                                    onChange={(event) => updatePermission(user.id, pageKey, event.target.value)}
+                                  >
+                                    {PERMISSION_OPTIONS.map((option) => (
+                                      <option key={option} value={option}>{t(`admin.permissionLevels.${option}`)}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                              );
+                            })}
+                            <td>
+                              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                                <input
+                                  type="password"
+                                  value={passwordResetDrafts[user.id] ?? ""}
+                                  onChange={(event) => setPasswordResetDrafts((drafts) => ({ ...drafts, [user.id]: event.target.value }))}
+                                  placeholder={t('admin.newPassword')}
+                                />
+                                <button type="button" onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {users.length === 0 && <p><small>{t('admin.loadUsersHint')}</small></p>}
+              {userManagementError ? <p className="error">{userManagementError}</p> : null}
+            </article>
         </section>
       ) : activeView === "admin" && !isAuthenticated ? (
         <section className="grid">
@@ -2392,7 +2658,7 @@ function App() {
             </button>
           </article>
         </section>
-      ) : activeView === "admin" && isAuthenticated && !isAdmin ? (
+      ) : activeView === "admin" && isAuthenticated && !hasPagePermission("admin", "admin") ? (
         <section className="grid">
           <article className="card">
             <h2>{t('admin.accessDenied')}</h2>

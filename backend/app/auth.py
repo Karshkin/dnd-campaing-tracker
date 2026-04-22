@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
-from .models import User
+from .models import PagePermission, User
 from .schemas import TokenData
 
 load_dotenv()
@@ -21,6 +21,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+PERMISSION_RANK = {
+    "none": 0,
+    "view": 1,
+    "edit": 2,
+    "admin": 3,
+}
 
 
 def get_db():
@@ -59,6 +65,22 @@ def authenticate_user(db: Session, username: str, password: str) -> User | bool:
     return user
 
 
+def has_permission_level(actual: str, required: str) -> bool:
+    return PERMISSION_RANK.get(actual, 0) >= PERMISSION_RANK.get(required, 0)
+
+
+def get_user_page_permission(db: Session, user: User, page_key: str) -> str:
+    if user.is_admin:
+        return "admin"
+
+    permission = (
+        db.query(PagePermission)
+        .filter(PagePermission.user_id == user.id, PagePermission.page_key == page_key)
+        .first()
+    )
+    return permission.permission_level if permission else "none"
+
+
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -88,3 +110,16 @@ async def get_current_admin_user(current_user: Annotated[User, Depends(get_curre
 async def get_current_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """Get any authenticated user (admin or regular)."""
     return current_user
+
+
+def require_page_permission(page_key: str, required_level: str):
+    async def dependency(
+        current_user: Annotated[User, Depends(get_current_user)],
+        db: Session = Depends(get_db),
+    ) -> User:
+        actual_level = get_user_page_permission(db, current_user, page_key)
+        if not has_permission_level(actual_level, required_level):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+        return current_user
+
+    return dependency
