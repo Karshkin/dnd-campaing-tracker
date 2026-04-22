@@ -321,3 +321,31 @@ def test_register_persists_permission_rows():
         assert len(rows) == len(DEFAULT_PERMISSIONS)
     finally:
         db.close()
+
+
+def test_legacy_admin_permissions_are_normalized_in_me(auth_headers):
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.username == "testadmin").first()
+        assert admin is not None
+
+        db.query(PagePermission).filter(PagePermission.user_id == admin.id).delete()
+        db.add(PagePermission(user_id=admin.id, page_key="tracker", permission_level="view"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/me", headers=auth_headers)
+
+    assert response.status_code == 200
+    permissions = {
+        item["page_key"]: item["permission_level"] for item in response.json()["permissions"]
+    }
+    assert permissions == {
+        "tracker": "admin",
+        "characters": "admin",
+        "bestiary": "admin",
+        "organizations": "admin",
+        "npcs": "admin",
+        "admin": "admin",
+    }

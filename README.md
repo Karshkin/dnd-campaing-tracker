@@ -58,10 +58,23 @@ cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -m app.migrations
 uvicorn app.main:app --reload
 ```
 
 API base URL: `http://localhost:8000`
+
+### Database migrations
+
+Run SQL migrations manually from `backend/`:
+
+```bash
+python -m app.migrations
+```
+
+The API startup also runs pending migrations automatically before serving requests.
+
+To add a new migration, create the next zero-padded SQL file in `backend/migrations/`, for example `015_some_change.sql`. Migrations run in filename order and each file is recorded once in `schema_migrations`, so keep each file focused on a single schema change.
 
 ## Frontend (React + Vite)
 
