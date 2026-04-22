@@ -1,0 +1,1 @@
+ALTER TABLE map_events ADD COLUMN map_id INTEGER REFERENCES maps(id);

@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Annotated
 
@@ -17,11 +18,11 @@ from .auth import (
     get_password_hash,
     require_page_permission,
 )
-from .database import SessionLocal, engine
+from .database import DATABASE_URL, SessionLocal
 from .file_handler import CHARACTER_SHEETS_DIR, MAPS_DIR, MARKER_IMAGES_DIR, delete_file, save_upload_file
+from .migrations import apply_project_migrations
 from .models import (
     Ally,
-    Base,
     Character,
     CharacterDiary,
     CharacterInventory,
@@ -74,79 +75,13 @@ from .schemas import (
     UserWithPermissionsRead,
 )
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    apply_project_migrations(DATABASE_URL)
+    yield
 
-# Run lightweight migration for existing databases
-import sqlite3 as _sqlite3
-try:
-    _conn = _sqlite3.connect("campaign.db")
-    _conn.execute("ALTER TABLE map_events ADD COLUMN map_id INTEGER REFERENCES maps(id)")
-    _conn.commit()
-    _conn.close()
-except Exception:
-    pass  # Column already exists
 
-try:
-    _conn = _sqlite3.connect("campaign.db")
-    for _sql in [
-        "ALTER TABLE map_events ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE points_of_interest ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE resources ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE diary_entries ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE creatures ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE allies ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE allies ADD COLUMN organization_id INTEGER REFERENCES organizations(id)",
-        "ALTER TABLE allies ADD COLUMN alignment VARCHAR(20) DEFAULT 'neutral'",
-        "ALTER TABLE characters ADD COLUMN image_path VARCHAR(255)",
-        "ALTER TABLE characters ADD COLUMN organization_id INTEGER REFERENCES organizations(id)",
-    ]:
-        try:
-            _conn.execute(_sql)
-        except Exception:
-            pass  # column already exists
-    _conn.commit()
-    _conn.close()
-except Exception:
-    pass
-
-try:
-    _conn = _sqlite3.connect("campaign.db")
-    _conn.execute("""
-        CREATE TABLE IF NOT EXISTS organizations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(120) NOT NULL,
-            description TEXT DEFAULT '',
-            image_path VARCHAR(255),
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    _conn.commit()
-    _conn.close()
-except Exception:
-    pass
-
-try:
-    _conn = _sqlite3.connect("campaign.db")
-    _conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS page_permissions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            page_key VARCHAR(50) NOT NULL,
-            permission_level VARCHAR(20) NOT NULL DEFAULT 'none',
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT uq_page_permissions_user_page UNIQUE (user_id, page_key),
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-        """
-    )
-    _conn.commit()
-    _conn.close()
-except Exception:
-    pass
-
-app = FastAPI(title="DnD Campaign Tracker API")
+app = FastAPI(title="DnD Campaign Tracker API", lifespan=lifespan)
 
 raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 allowed_origins = [origin.strip() for origin in raw_allowed_origins.split(",") if origin.strip()]
@@ -193,11 +128,14 @@ def ensure_user_permissions(db: Session, user: User) -> list[PagePermission]:
     changed = False
 
     for page_key in PAGE_KEYS:
+        default_level = "admin" if user.is_admin else DEFAULT_SELF_REGISTER_PERMISSIONS.get(page_key, "none")
         if page_key not in existing:
-            default_level = "admin" if user.is_admin and page_key == "admin" else DEFAULT_SELF_REGISTER_PERMISSIONS.get(page_key, "none")
             permission = PagePermission(user_id=user.id, page_key=page_key, permission_level=default_level)
             db.add(permission)
             existing[page_key] = permission
+            changed = True
+        elif existing[page_key].permission_level != default_level:
+            existing[page_key].permission_level = default_level
             changed = True
 
     if changed:

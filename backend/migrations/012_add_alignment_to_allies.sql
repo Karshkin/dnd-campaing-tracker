@@ -1,0 +1,1 @@
+ALTER TABLE allies ADD COLUMN alignment VARCHAR(20) NOT NULL DEFAULT 'neutral';

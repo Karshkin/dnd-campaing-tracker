@@ -4,13 +4,13 @@ import sys
 from getpass import getpass
 
 from app.auth import get_password_hash
-from app.database import SessionLocal, engine
-from app.models import Base, User
-
-Base.metadata.create_all(bind=engine)
+from app.database import DATABASE_URL, SessionLocal
+from app.migrations import apply_project_migrations
+from app.models import User
 
 
 def main():
+    apply_project_migrations(DATABASE_URL)
     db = SessionLocal()
     try:
         existing_admins = db.query(User).filter(User.is_admin == True).count()

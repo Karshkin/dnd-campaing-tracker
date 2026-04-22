@@ -1,0 +1,138 @@
+PRAGMA foreign_keys = OFF;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    hashed_password VARCHAR(255) NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username);
+
+CREATE TABLE IF NOT EXISTS maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(120) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    file_path VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_maps_id ON maps (id);
+
+CREATE TABLE IF NOT EXISTS map_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title VARCHAR(120) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    event_type VARCHAR(30) NOT NULL DEFAULT 'event',
+    latitude FLOAT NOT NULL,
+    longitude FLOAT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_map_events_id ON map_events (id);
+
+CREATE TABLE IF NOT EXISTS diary_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title VARCHAR(120) NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_diary_entries_id ON diary_entries (id);
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(120) NOT NULL UNIQUE,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_resources_id ON resources (id);
+
+CREATE TABLE IF NOT EXISTS points_of_interest (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    map_id INTEGER NOT NULL REFERENCES maps(id),
+    title VARCHAR(120) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    poi_type VARCHAR(30) NOT NULL DEFAULT 'location',
+    latitude FLOAT NOT NULL,
+    longitude FLOAT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_points_of_interest_id ON points_of_interest (id);
+
+CREATE TABLE IF NOT EXISTS characters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    name VARCHAR(120) NOT NULL,
+    character_class VARCHAR(50) NOT NULL DEFAULT '',
+    level INTEGER NOT NULL DEFAULT 1,
+    race VARCHAR(50) NOT NULL DEFAULT '',
+    sheet_file_path VARCHAR(255) NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_characters_id ON characters (id);
+
+CREATE TABLE IF NOT EXISTS character_inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    item_name VARCHAR(120) NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    description TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_character_inventory_id ON character_inventory (id);
+
+CREATE TABLE IF NOT EXISTS character_diary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    title VARCHAR(120) NOT NULL,
+    content TEXT NOT NULL,
+    session_date DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_character_diary_id ON character_diary (id);
+
+CREATE TABLE IF NOT EXISTS creatures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    added_by_user_id INTEGER NOT NULL REFERENCES users(id),
+    name VARCHAR(120) NOT NULL,
+    creature_type VARCHAR(50) NOT NULL DEFAULT '',
+    challenge_rating VARCHAR(20) NOT NULL DEFAULT '',
+    armor_class INTEGER NOT NULL DEFAULT 0,
+    hit_points VARCHAR(50) NOT NULL DEFAULT '',
+    speed VARCHAR(100) NOT NULL DEFAULT '',
+    abilities TEXT NOT NULL DEFAULT '',
+    weaknesses TEXT NOT NULL DEFAULT '',
+    resistances TEXT NOT NULL DEFAULT '',
+    immunities TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_creatures_id ON creatures (id);
+
+CREATE TABLE IF NOT EXISTS allies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    added_by_user_id INTEGER NOT NULL REFERENCES users(id),
+    name VARCHAR(120) NOT NULL,
+    role VARCHAR(100) NOT NULL DEFAULT '',
+    location VARCHAR(120) NOT NULL DEFAULT '',
+    relationship TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_allies_id ON allies (id);
+
+PRAGMA foreign_keys = ON;
