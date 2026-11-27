@@ -44,6 +44,7 @@ try {
     email: adminEmail, password, email_confirm: true, user_metadata: { username: `DM ${run}` },
   })).user;
   cleanup.push(() => admin.auth.admin.deleteUser(dm.id));
+  ok(await admin.from("profiles").update({ is_admin: true }).eq("id", dm.id));
   const dmAccount = createClient(url, key, options);
   const dmSession = ok(await dmAccount.auth.signInWithPassword({ email: adminEmail, password })).session;
   const campaignId = ok(await dmAccount.rpc("manage_campaign", {
@@ -53,6 +54,11 @@ try {
     action: "create", payload: { name: `Other ${run}` },
   }));
   cleanup.push(() => admin.from("campaigns").delete().in("id", [campaignId, otherCampaignId]));
+  const otherSlug = `other-${run}`;
+  const { campaigns, is_superadmin: elevated } = ok(await dmAccount.rpc("manage_campaign", { action: "directory" }));
+  assert.equal(elevated, true);
+  assert.equal(campaigns.find(({ id }) => id === campaignId).slug, `campaign-${run}`);
+  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: otherSlug })), `Other ${run}`);
   const scopedClient = (campaign) => createClient(url, key, {
     ...options, global: { headers: { "x-campaign-id": campaign } },
   });
@@ -96,6 +102,56 @@ try {
   ok(await outside.auth.setSession(playerSession));
   assert.deepEqual(ok(await outside.from("campaigns").select("id").eq("id", otherCampaignId)), []);
   assert.ok((await outside.rpc("manage_campaign", { action: "roster" })).error);
+
+  const linkAccount = scopedClient(otherSlug);
+  const linkEmail = `link-${run}@example.com`;
+  const linkUser = ok(await linkAccount.auth.signUp({
+    email: linkEmail, password,
+    options: { data: { username: `Link ${run}`, campaign_slug: otherSlug, is_admin: true } },
+  })).user;
+  cleanup.push(() => admin.auth.admin.deleteUser(linkUser.id));
+  ok(await linkAccount.auth.signInWithPassword({ email: linkEmail, password }));
+  const linkDirectory = ok(await linkAccount.rpc("manage_campaign", { action: "directory" }));
+  assert.deepEqual(linkDirectory.campaigns.map(({ id }) => id), [otherCampaignId]);
+  assert.equal(linkDirectory.is_superadmin, false);
+  assert.equal(ok(await linkAccount.rpc("manage_campaign", { action: "self" })).is_admin, false);
+  assert.ok((await linkAccount.rpc("manage_campaign", {
+    action: "create", payload: { name: "Unauthorized" },
+  })).error);
+  assert.ok((await linkAccount.rpc("manage_campaign", {
+    action: "director", payload: { userId: linkUser.id, director: true },
+  })).error);
+  ok(await linkAccount.auth.updateUser({ data: { campaign_slug: `campaign-${run}` } }));
+  assert.deepEqual(ok(await linkAccount.rpc("manage_campaign", { action: "directory" }))
+    .campaigns.map(({ id }) => id), [otherCampaignId]);
+
+  const globalOther = scopedClient(otherSlug);
+  ok(await globalOther.auth.setSession(dmSession));
+  ok(await globalOther.rpc("manage_campaign", { action: "director", payload: { userId: linkUser.id, director: true } }));
+  assert.equal(ok(await linkAccount.rpc("manage_campaign", { action: "self" })).is_admin, true);
+  assert.ok((await linkAccount.rpc("manage_campaign", {
+    action: "director", payload: { userId: dm.id, director: false },
+  })).error);
+  assert.deepEqual(ok(await linkAccount.from("campaigns").select("id").eq("id", campaignId)), []);
+
+  const newSlug = `updated-${run}`;
+  ok(await linkAccount.from("campaigns").update({ slug: newSlug }).eq("id", otherCampaignId).select().single());
+  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: otherSlug })), null);
+  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: newSlug })), `Other ${run}`);
+  assert.ok((await dmClient.from("campaigns").update({ slug: otherSlug }).eq("id", campaignId)).error);
+  assert.ok((await outsider.auth.signUp({
+    email: `retired-${run}@example.com`, password,
+    options: { data: { username: `Retired ${run}`, campaign_slug: otherSlug } },
+  })).error);
+
+  // Global access must not depend on a row in the campaign roster.
+  ok(await admin.from("campaign_members").delete().eq("campaign_id", otherCampaignId).eq("user_id", dm.id));
+  const renamedScope = scopedClient(newSlug);
+  ok(await renamedScope.auth.setSession(dmSession));
+  const globalProfile = ok(await renamedScope.rpc("manage_campaign", { action: "self" }));
+  assert.equal(globalProfile.is_superadmin, true);
+  assert.ok(ok(await renamedScope.rpc("manage_campaign", { action: "roster" })).some(({ id }) => id === linkUser.id));
+  ok(await renamedScope.rpc("manage_campaign", { action: "director", payload: { userId: linkUser.id, director: false } }));
 
   const name = `Torch ${run}`;
   const resource = await request(api, "/resources", "POST", { name, quantity: 1 });

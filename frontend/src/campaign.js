@@ -2,16 +2,30 @@ import { createClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-export const selectedCampaignId = new URLSearchParams(globalThis.location?.search).get("campaign");
+export let selectedCampaignRef = new URLSearchParams(globalThis.location?.search).get("campaign");
+export function campaignLink(slug, view = "") {
+  const link = new URL(import.meta.env.BASE_URL, window.location.origin);
+  if (slug) link.searchParams.set("campaign", slug);
+  link.hash = view;
+  return link;
+}
+
+export function replaceCampaignRef(slug) {
+  const link = new URL(window.location.href);
+  link.searchParams.set("campaign", slug);
+  window.history.replaceState(window.history.state, "", link);
+  selectedCampaignRef = slug;
+}
+
 export const supabase = url && key ? createClient(url, key, {
   global: {
     fetch(input, options) {
       const requestUrl = typeof input === "string" || input instanceof URL ? String(input) : input.url;
-      if (!selectedCampaignId || !requestUrl.startsWith(`${url.replace(/\/$/, "")}/rest/v1/`)) {
+      if (!selectedCampaignRef || !requestUrl.startsWith(`${url.replace(/\/$/, "")}/rest/v1/`)) {
         return fetch(input, options);
       }
       const headers = new Headers(options?.headers ?? (input instanceof Request ? input.headers : undefined));
-      headers.set("x-campaign-id", selectedCampaignId);
+      headers.set("x-campaign-id", encodeURIComponent(selectedCampaignRef));
       return fetch(input, { ...options, headers });
     },
   },
@@ -77,14 +91,19 @@ export function readProfile() {
 }
 
 export const campaignSettings = {
-  async list(userId) {
-    const campaigns = await pagedRows(supabase.from("campaign_members")
-      .select("is_director,campaign:campaigns(*)").eq("user_id", userId).order("campaign_id"));
-    return campaigns.map(({ campaign, is_director }) => ({ ...campaign, is_director }))
-      .sort((left, right) => left.name.localeCompare(right.name));
+  list() {
+    return campaignAction("directory");
   },
-  create(name) {
-    return campaignAction("create", { name });
+  async create(name) {
+    const id = await campaignAction("create", { name });
+    const { slug } = await value(supabase.from("campaigns").select("slug").eq("id", id).single());
+    return slug;
+  },
+  setDirector(userId, director) {
+    return campaignAction("director", { userId, director });
+  },
+  registrationName(slug) {
+    return value(supabase.rpc("registration_campaign", { link_slug: slug }));
   },
   async images(campaign) {
     const objects = [campaign.cover_path, campaign.emblem_path].filter(Boolean);
@@ -109,7 +128,10 @@ export const campaignSettings = {
         staged.push(path);
         changes[`${kind}_path`] = path;
       }
-      const query = supabase.from("campaigns").update(changes).eq("id", campaign.id);
+      const { slug, ...patch } = changes;
+      if (slug !== campaign.slug) patch.slug = slug;
+      const query = supabase.from("campaigns").update(patch).eq("id", campaign.id);
+      if (patch.slug) query.eq("slug", campaign.slug);
       const fields = ["cover_path", "emblem_path"].filter((field) => Object.hasOwn(changes, field));
       for (const field of fields) {
         if (campaign[field] === null) query.is(field, null);

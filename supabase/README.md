@@ -43,9 +43,7 @@ permiso para ver la sección. Solo se puede firmar con un personaje propio.
 
 La migración de aislamiento conserva los IDs y las rutas de archivos, incorpora las
 cuentas y roles existentes a **Tiranía de los dragones** y fija la campaña en los
-registros anteriores. Las altas posteriores deben crear una campaña o ser añadidas por
-uno de sus administradores. La app envía el identificador de la campaña seleccionada
-con las peticiones de datos, y PostgreSQL comprueba pertenencia, permisos y relaciones.
+registros anteriores. PostgreSQL comprueba pertenencia, permisos y relaciones en cada campaña.
 
 Para el corte de producción, prueba estas dos migraciones primero contra una copia
 desechable del esquema y de los datos, con clientes de dos campañas en PostgREST y
@@ -57,6 +55,27 @@ deja de poder cargar su perfil al cambiar los permisos de la tabla. Comprueba el
 acceso de las cuentas existentes y realiza una prueba de lectura y subida de imágenes
 en dos campañas. Si hay que revertir, restaura juntos el esquema, la función y el
 frontend anterior. La recuperación de contraseñas corresponde a la cuenta de Auth.
+
+### Enlaces de registro y superadministración
+
+Tras aplicar la migración de enlaces y superadministración, la URL de Tiranía de los
+dragones usa `?campaign=tirania-de-los-dragones`. Los administradores pueden consultar
+el enlace de registro y cambiar su identificador en **Admin → Configuración de campaña**.
+Las cuentas nuevas creadas desde el enlace entran como jugadoras en esa campaña. Las
+cuentas existentes pueden añadirse por nombre desde la gestión de miembros. Una cuenta
+creada sin enlace queda a la espera de que se añada a una campaña. Cambiar el identificador
+desactiva el enlace anterior sin cambiar las membresías.
+
+La cuenta con el permiso global anterior conserva la superadministración. Este permiso
+permite crear campañas, acceder a todas y asignar administradores por campaña. El
+administrador de una campaña conserva sus permisos dentro de esa campaña. Solo un
+operador de Supabase puede cambiar el permiso global en `public.profiles.is_admin`
+para la cuenta que haya verificado.
+
+Aplica `20261127165548_campaign_links_and_superadmin.sql` antes de publicar el frontend
+que usa los enlaces. Comprueba en **Authentication → URL Configuration** que el origen
+y la ruta de GitHub Pages se admiten para la confirmación de correo y prueba un alta
+desde un enlace con el parámetro `campaign`.
 
 ## 2. Importar una campaña existente, si la hay
 
