@@ -98,6 +98,15 @@
     "add": "Add Entry",
     "createError": "Could not create diary entry."
   },
+  "entryEditor": {
+    "alignment": "Attitude",
+    "organization": "Organization",
+    "currentOrganization": "Current organization",
+    "cover": "Main image",
+    "removeCover": "Remove main image",
+    "confirmRemoveCover": "Remove the main image?",
+    "image": "Entry image {{number}}"
+  },
   "characterSheet": {
     "nivel20Label": "Nivel20 link (optional)",
     "nivel20Help": "Paste your character’s HTTPS link from Share in Nivel20.",

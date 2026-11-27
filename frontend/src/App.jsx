@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 
-import { CharacterGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
+import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
+import { CampaignEntryTools } from "./CampaignEntryEditor";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
@@ -1889,7 +1890,7 @@ function Campaign({ session }) {
                   onSave={(draft) => saveCharacterSheet(selectedCharacter.id, draft)} />
 
                 {(ownsSelectedCharacter || currentUser?.is_admin) && (
-                  <CharacterGallery key={selectedCharacter.id} characterId={selectedCharacter.id}
+                  <ImageGallery key={selectedCharacter.id} path={`/characters/${selectedCharacter.id}/gallery`}
                     editable={canEditSelectedCharacter} api={request} onView={setSelectedCharacterImage} />
                 )}
 
@@ -2017,7 +2018,7 @@ function Campaign({ session }) {
                   ) : (
                     <span style={{ fontSize: "2rem", flexShrink: 0 }}>🐉</span>
                   )}
-                  <div style={{ flexGrow: 1 }}>
+                  <div className="campaign-entry-content">
                     <div className="row">
                       <strong>{creature.name}</strong>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
@@ -2042,6 +2043,9 @@ function Campaign({ session }) {
                     {creature.resistances && <p><strong>{t('bestiary.resistances')}</strong> {creature.resistances}</p>}
                     {creature.immunities && <p><strong>{t('bestiary.immunities')}</strong> {creature.immunities}</p>}
                     {creature.notes && <p><strong>{t('bestiary.notesLabel')}</strong> {creature.notes}</p>}
+                    <CampaignEntryTools collection="creatures" entry={creature}
+                      editable={hasPagePermission("bestiary", "edit")} api={request}
+                      refresh={refreshCreatures} onView={setSelectedCreatureImage} />
                   </div>
                 </li>
               ))}
@@ -2139,6 +2143,9 @@ function Campaign({ session }) {
                   <button type="button" onClick={() => setSelectedOrg(null)} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "var(--sienna)" }}>✕</button>
                 </div>
                 <div style={{ padding: "1rem" }}>
+                  <CampaignEntryTools key={selectedOrg.id} collection="organizations" entry={selectedOrg}
+                    editable={hasPagePermission("organizations", "edit")} api={request}
+                    refresh={refreshOrganizations} onView={setSelectedOrgImage} />
                   <h4 style={{ margin: "0 0 0.75rem" }}>{t('organizations.membersSection')}</h4>
                   {allies.filter((a) => a.organization_id === selectedOrg.id).length === 0 ? (
                     <p style={{ margin: 0 }}>{t('organizations.noMembers')}</p>
@@ -2200,7 +2207,7 @@ function Campaign({ session }) {
                     ) : (
                       <span style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>👤</span>
                     )}
-                    <div style={{ flexGrow: 1 }}>
+                    <div className="campaign-entry-content">
                       <div className="row">
                         <div>
                           <strong>{ally.name}</strong>
@@ -2248,6 +2255,9 @@ function Campaign({ session }) {
                       {ally.location && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.locationLabel')}</strong> {ally.location}</p>}
                       {ally.relationship && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.relationshipLabel')}</strong> {ally.relationship}</p>}
                       {ally.notes && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.notesLabel')}</strong> {ally.notes}</p>}
+                      <CampaignEntryTools collection="allies" entry={ally} organizations={organizations}
+                        editable={hasPagePermission("npcs", "edit")} api={request}
+                        refresh={refreshAllies} onView={setSelectedAllyImage} />
                     </div>
                   </li>
                 );

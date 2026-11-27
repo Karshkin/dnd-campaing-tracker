@@ -142,27 +142,30 @@ async function createMap(form) {
   }
 }
 
-function galleryBucket() {
-  return supabase.storage.from("character-gallery");
-}
+const galleryConfigs = {
+  characters: { table: "character_gallery", parent: "character_id", bucket: "character-gallery" },
+  creatures: { table: "campaign_entry_images", parent: "creature_id", bucket: "campaign-entry-images", section: "bestiary" },
+  allies: { table: "campaign_entry_images", parent: "ally_id", bucket: "campaign-entry-images", section: "npcs" },
+  organizations: { table: "campaign_entry_images", parent: "organization_id", bucket: "campaign-entry-images", section: "organizations" },
+};
 
-async function galleryRows(characterId) {
+async function galleryRows(config, entryId) {
   const rows = [];
   const size = 1000;
   for (let offset = 0; ; offset += size) {
-    const page = await value(supabase.from("character_gallery").select("id,object_path")
-      .eq("character_id", characterId).order("id", { ascending: false }).range(offset, offset + size - 1));
+    const page = await value(supabase.from(config.table).select("id,object_path")
+      .eq(config.parent, entryId).order("id", { ascending: false }).range(offset, offset + size - 1));
     rows.push(...page);
     if (page.length < size) return rows;
   }
 }
 
-async function characterGallery(characterId, imageId, method, file) {
-  const storage = galleryBucket();
-  const gallery = supabase.from("character_gallery");
+async function entryGallery(config, entryId, imageId, method, file) {
+  const storage = supabase.storage.from(config.bucket);
+  const gallery = supabase.from(config.table);
 
   if (method === "GET") {
-    const rows = await galleryRows(characterId);
+    const rows = await galleryRows(config, entryId);
     const images = [];
     for (let offset = 0; offset < rows.length; offset += 100) {
       const batch = rows.slice(offset, offset + 100);
@@ -174,7 +177,7 @@ async function characterGallery(characterId, imageId, method, file) {
   }
 
   if (method === "DELETE") {
-    const row = await value(gallery.delete().eq("id", imageId).eq("character_id", characterId)
+    const row = await value(gallery.delete().eq("id", imageId).eq(config.parent, entryId)
       .select("object_path").single());
     await removeFiles([row.object_path], storage);
     return;
@@ -183,10 +186,10 @@ async function characterGallery(characterId, imageId, method, file) {
   const extension = fileExtension(file, "gallery");
   const { session } = await value(supabase.auth.getSession());
   if (!session) throw new Error("Authentication required");
-  const objectPath = `${session.user.id}/${characterId}/${crypto.randomUUID()}.${extension}`;
+  const objectPath = `${config.section ?? session.user.id}/${entryId}/${crypto.randomUUID()}.${extension}`;
   await value(storage.upload(objectPath, file));
   try {
-    return await value(gallery.insert({ character_id: Number(characterId), object_path: objectPath }).select("id").single());
+    return await value(gallery.insert({ [config.parent]: Number(entryId), object_path: objectPath }).select("id").single());
   } catch (error) {
     await removeFiles([objectPath], storage);
     throw error;
@@ -197,9 +200,12 @@ async function deleteRecord(table, id) {
   const poiFiles = table === "maps"
     ? await value(supabase.from("points_of_interest").select("image_path").eq("map_id", id))
     : [];
-  const gallery = table === "characters" ? await galleryRows(id) : [];
+  const config = galleryConfigs[table];
+  const gallery = config ? await galleryRows(config, id) : [];
   const row = await value(supabase.from(table).delete().eq("id", id).select().single());
-  await removeFiles(gallery.map((image) => image.object_path), galleryBucket());
+  if (gallery.length) {
+    await removeFiles(gallery.map((image) => image.object_path), supabase.storage.from(config.bucket));
+  }
   await removeFiles([...mediaFields.map((field) => row[field]), ...poiFiles.map((poi) => poi.image_path)].filter(Boolean));
 }
 
@@ -222,8 +228,8 @@ async function dispatch(path, method, body) {
   if (collection === "character-companions" && method === "GET") {
     return listRows(supabase.rpc("list_character_companions"), "name", true);
   }
-  if (collection === "characters" && action === "gallery") {
-    return characterGallery(id, key, method, body);
+  if (action === "gallery" && Object.hasOwn(galleryConfigs, collection)) {
+    return entryGallery(galleryConfigs[collection], id, key, method, body);
   }
   const params = location.searchParams;
 
@@ -263,6 +269,14 @@ async function dispatch(path, method, body) {
     return listRows(query, order, ascending);
   }
 
+  if (method === "DELETE" && action === "image") {
+    const current = await value(source.select("image_path").eq("id", id).single());
+    if (!current.image_path) return;
+    await value(source.update({ image_path: null }).eq("id", id)
+      .eq("image_path", current.image_path).select("id").single());
+    await removeFiles([current.image_path]);
+    return;
+  }
   if (method === "DELETE") return deleteRecord(table, id);
   if (method === "POST") {
     if (collection === "maps") return createMap(body);
