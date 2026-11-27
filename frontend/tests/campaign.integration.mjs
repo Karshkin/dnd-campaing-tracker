@@ -55,10 +55,14 @@ try {
   }));
   cleanup.push(() => admin.from("campaigns").delete().in("id", [campaignId, otherCampaignId]));
   const otherSlug = `other-${run}`;
+  assert.ok((await outsider.rpc("registration_campaign", { link_slug: otherSlug })).error);
+  for (const table of ["campaigns", "maps", "points_of_interest", "resources", "chronicle_sessions", "inventory_groups", "organizations"]) {
+    const { data, error } = await outsider.from(table).select("id").limit(1);
+    assert.ok(error?.code === "42501" || data?.length === 0, `Anonymous access to ${table}`);
+  }
   const { campaigns, is_superadmin: elevated } = ok(await dmAccount.rpc("manage_campaign", { action: "directory" }));
   assert.equal(elevated, true);
   assert.equal(campaigns.find(({ id }) => id === campaignId).slug, `campaign-${run}`);
-  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: otherSlug })), `Other ${run}`);
   const scopedClient = (campaign) => createClient(url, key, {
     ...options, global: { headers: { "x-campaign-id": campaign } },
   });
@@ -136,8 +140,6 @@ try {
 
   const newSlug = `updated-${run}`;
   ok(await linkAccount.from("campaigns").update({ slug: newSlug }).eq("id", otherCampaignId).select().single());
-  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: otherSlug })), null);
-  assert.equal(ok(await outsider.rpc("registration_campaign", { link_slug: newSlug })), `Other ${run}`);
   assert.ok((await dmClient.from("campaigns").update({ slug: otherSlug }).eq("id", campaignId)).error);
   assert.ok((await outsider.auth.signUp({
     email: `retired-${run}@example.com`, password,

@@ -630,3 +630,35 @@ a:hover {
     linear-gradient(-33deg, transparent 44%, white 44% 49%, #c8102e 49% 54%, white 54% 58%, transparent 58%),
     #012169;
 }
+
+.campaign-section {
+  min-width: 0;
+}
+
+.auth-layout {
+  max-width: 32rem;
+  margin-inline: auto;
+}
+
+.resources-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(6rem, 1fr) minmax(0, 2fr);
+  align-items: end;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.resources-form > label,
+.resources-form > p {
+  grid-column: 1 / -1;
+}
+
+.resources-form > button {
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .resources-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

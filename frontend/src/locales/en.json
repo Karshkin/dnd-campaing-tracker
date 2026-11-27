@@ -8,8 +8,6 @@
     "slugHelp": "Use lowercase letters, numbers, and hyphens. Share the new registration link if you change it.",
     "registrationLink": "Registration link",
     "slugTaken": "This identifier is already in use.",
-    "registerFor": "You’re registering for {{name}}.",
-    "invalidRegistration": "This registration link is no longer active. Ask a campaign administrator for a new one.",
     "superadmin": "Superadmin",
     "title": "Campaigns",
     "label": "Campaign",
@@ -37,7 +35,10 @@
   },
   "nav": {
     "language": "Language",
-    "chronicle": "📜 Chronicle",
+    "locations": "Locations and maps",
+    "chronicle": "Adventure chronicle",
+    "inventory": "Group inventory",
+    "resources": "Resources",
     "characters": "🗡️ Characters",
     "bestiary": "🐉 Bestiary",
     "organizations": "🏰 Organizations",
@@ -46,6 +47,13 @@
     "login": "🔓 Login",
     "register": "📝 Register",
     "logout": "🚪 Logout"
+  },
+  "chronicleNav": {
+    "sessions": "Sessions",
+    "quests": "Quests",
+    "gallery": "Gallery",
+    "archive": "Diary entries",
+    "searchArchive": "Search diary entries"
   },
   "common": {
     "loading": "Loading…",

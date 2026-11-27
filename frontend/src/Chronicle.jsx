@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { campaignChronicle, groupInventory, treasury } from "./campaign";
@@ -172,8 +173,7 @@ function Gallery({ data, campaignId, director, mutation }) {
   return <>
     {cover?.url && <figure className="chronicle-cover"><img src={cover.url} alt={cover.caption} />
       {cover.caption && <figcaption>{cover.caption}</figcaption>}</figure>}
-    <details>
-      <summary>Galería</summary>
+    <section className="chronicle-flow">
       {director && <form className="form" onSubmit={async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
@@ -196,7 +196,7 @@ function Gallery({ data, campaignId, director, mutation }) {
           </div>}
         </figure>)}
       </div>
-    </details>
+    </section>
   </>;
 }
 
@@ -205,10 +205,11 @@ function Quests({ data, director, mutation, sessionState }) {
   const [editing, setEditing] = useState(null);
   const [status, setStatus] = useState("active");
   const [session, setSession] = useState("");
-  return <details>
-    <summary>Misiones</summary>
+  return <section className="chronicle-flow">
+    <div className="chronicle-actions">
     <SelectRow label="Estado de misión" rows={rows(questStates)} value={filter} onChange={setFilter} empty="Todas" />
     {director && <button type="button" onClick={() => { setStatus("active"); setSession(""); setEditing({}); }}>Nueva misión</button>}
+    </div>
     {editing && <form key={editing.id ?? "new"} className="form" onSubmit={async (event) => {
       event.preventDefault();
       const fields = Object.fromEntries(new FormData(event.currentTarget));
@@ -236,11 +237,13 @@ function Quests({ data, director, mutation, sessionState }) {
         }}>Editar misión</button>}
       </li>
     ))}</ul>
-  </details>;
+  </section>;
 }
 
 export function Chronicle({ campaignId, director, characters, organizations, allies, creatures, openEntity,
   onClose, legacy }) {
+  const { t } = useTranslation();
+  const [section, setSection] = useState("sessions");
   const load = useCallback(async () => {
     const [chapters, sessions, attendance, links, quests, images, notes, groups, places] = await Promise.all([
       campaignChronicle.list("chronicle_chapters", "position"), campaignChronicle.list("chronicle_sessions", "played_on"),
@@ -269,76 +272,90 @@ export function Chronicle({ campaignId, director, characters, organizations, all
   const session = sessions.find(({ id }) => id === current) ?? sessions[0];
 
   return <article className="card chronicle">
-    <h2>Crónica de aventuras</h2>
-    <Gallery data={data} campaignId={campaignId} director={director} mutation={mutation} />
+    <h2>{t("nav.chronicle")}</h2>
+    <nav className="section-nav" aria-label={t("nav.chronicle")}>
+      {["sessions", "quests", "gallery", "archive"].map((view) => (
+        <button key={view} type="button" aria-pressed={section === view}
+          className={section === view ? "active" : ""}
+          onClick={() => { setSection(view); setSearch(""); }}>
+          {t(`chronicleNav.${view}`)}
+        </button>
+      ))}
+    </nav>
     {mutation.error && <p className="error" role="alert">{mutation.error}</p>}
-    {director && <details><summary>Gestionar capítulos</summary>
-      <ul className="chronicle-list">{data.chapters.map((row) => <li key={row.id}>{row.title}
-        <button type="button" onClick={() => setChapterEdit(row)}>Editar capítulo</button></li>)}</ul>
-      <form className="form" key={chapterEdit?.id ?? "new"} onSubmit={async (event) => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const fields = new FormData(form);
-        if (await mutation.run(() => campaignChronicle.save("chronicle_chapters", {
-          title: fields.get("title"), position: Number(fields.get("position")),
-        }, chapterEdit?.id))) { form.reset(); setChapterEdit(null); }
-      }}>
-        <label>Título del capítulo <input name="title" required maxLength={120} defaultValue={chapterEdit?.title} /></label>
-        <label>Orden <input type="number" name="position" defaultValue={chapterEdit?.position ?? 0} /></label>
-        <button disabled={mutation.busy}>{chapterEdit ? "Guardar capítulo" : "Añadir capítulo"}</button>
-        {chapterEdit && <button type="button" onClick={() => setChapterEdit(null)}>Cancelar</button>}
-      </form>
-    </details>}
-    <Quests data={data} director={director} mutation={mutation} sessionState={(id) => {
-      setCurrent(id); setChapter(""); setStatus(""); setSearch("");
-    }} />
-    <div className="chronicle-actions">
-      <label>Buscar en la crónica <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-      <SelectRow label="Capítulo" rows={data.chapters} value={chapter} onChange={setChapter} empty="Todos" />
-      <SelectRow label="Estado de sesión" rows={rows(states).filter(({ id }) => director || id !== "draft")}
-        value={status} onChange={setStatus} empty="Todos" />
-      {director && <button type="button" onClick={() => { setEditing(emptySession); setClosing(null); }}>Nueva sesión</button>}
-    </div>
-    {editing && <SessionEditor key={editing.id ?? "new"} session={editing} data={data} entities={entities}
-      characters={characters} busy={mutation.busy} onCancel={() => setEditing(null)} onSave={async (payload) => {
-        if (await mutation.run(() => campaignChronicle.action("save_session", payload))) setEditing(null);
-      }} />}
-    {session ? <>
-      <SelectRow label="Sesión" rows={sessions.map((row) => ({ ...row, title: `${row.played_on} · ${row.title}` }))}
-        value={session.id} onChange={(id) => { setCurrent(id); setClosing(null); }} />
-      <section className="chronicle-panel" id={`session-${session.id}`}>
-        <h3>{session.title}</h3>
-        <p><time dateTime={session.played_on}>{new Date(`${session.played_on}T00:00:00`).toLocaleDateString()}</time> · {states[session.status]}
-          {session.chapter_id && <> · {data.chapters.find(({ id }) => id === session.chapter_id)?.title}</>}
-        </p>
-        <div dangerouslySetInnerHTML={{ __html: cleanSummary(session.summary) }} />
-        <dl>{Object.entries({ rewards: "Recompensas", decisions: "Decisiones", consequences: "Consecuencias" })
-          .filter(([field]) => session[field]).map(([field, label]) => <div key={field}><dt>{label}</dt><dd>{session[field]}</dd></div>)}</dl>
-        {data.attendance.some(({ session_id }) => session_id === session.id) && <p>Asistencia · {data.attendance
-          .filter(({ session_id }) => session_id === session.id)
-          .map(({ character_id }) => characters.find(({ id }) => id === character_id)?.name).filter(Boolean).join(", ")}</p>}
-        <ul className="chronicle-list">{data.links.filter(({ session_id }) => session_id === session.id).map((row) => {
-          const field = Object.keys(linkTypes).find((key) => row[key] != null);
-          const entry = entities[field].find(({ id }) => id === row[field]);
-          if (!entry) return null;
-          return <li key={row.id}>{linkTypes[field]} · <button type="button" onClick={() => openEntity(field, entry)}>{entry.title ?? entry.name}</button></li>;
-        })}</ul>
-        {director && <>
-          <details><summary>Notas privadas del director</summary>
-            <p className="chronicle-pre">{data.notes.find(({ session_id }) => session_id === session.id)?.notes}</p>
-          </details>
-          <div className="chronicle-actions">
-            <button type="button" onClick={() => { setEditing(session); setClosing(null); }}>Editar sesión</button>
-            {session.status === "draft" && <button type="button" disabled={mutation.busy}
-              onClick={() => mutation.run(() => campaignChronicle.action("publish", { session_id: session.id }))}>Publicar resumen</button>}
-            {session.status !== "closed" && <button type="button" onClick={() => { setClosing(closing === session.id ? null : session.id); setEditing(null); }}>
-              {closing === session.id ? "Cancelar cierre" : "Preparar cierre"}</button>}
-          </div>
-        </>}
-        {closing === session.id && session.status !== "closed" && <Closure key={session.id} session={session}
-          data={data} entities={entities} characters={characters} mutation={mutation} onDone={() => { setClosing(null); onClose(); }} />}
-      </section>
-    </> : <p>No hay sesiones que coincidan con los filtros.</p>}
-    {legacy(search)}
+    {section === "gallery" && <Gallery data={data} campaignId={campaignId} director={director} mutation={mutation} />}
+    {section === "quests" && <Quests data={data} director={director} mutation={mutation} sessionState={(id) => {
+      setSection("sessions"); setCurrent(id); setChapter(""); setStatus(""); setSearch("");
+    }} />}
+    {section === "archive" && <section className="chronicle-flow">
+      <label>{t("chronicleNav.searchArchive")} <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+      {legacy(search)}
+    </section>}
+    {section === "sessions" && <section className="chronicle-flow">
+      {director && <details><summary>Gestionar capítulos</summary>
+        <ul className="chronicle-list">{data.chapters.map((row) => <li key={row.id}>{row.title}
+          <button type="button" onClick={() => setChapterEdit(row)}>Editar capítulo</button></li>)}</ul>
+        <form className="form" key={chapterEdit?.id ?? "new"} onSubmit={async (event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const fields = new FormData(form);
+          if (await mutation.run(() => campaignChronicle.save("chronicle_chapters", {
+            title: fields.get("title"), position: Number(fields.get("position")),
+          }, chapterEdit?.id))) { form.reset(); setChapterEdit(null); }
+        }}>
+          <label>Título del capítulo <input name="title" required maxLength={120} defaultValue={chapterEdit?.title} /></label>
+          <label>Orden <input type="number" name="position" defaultValue={chapterEdit?.position ?? 0} /></label>
+          <button disabled={mutation.busy}>{chapterEdit ? "Guardar capítulo" : "Añadir capítulo"}</button>
+          {chapterEdit && <button type="button" onClick={() => setChapterEdit(null)}>Cancelar</button>}
+        </form>
+      </details>}
+      <div className="chronicle-actions">
+        <label>Buscar en la crónica <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+        <SelectRow label="Capítulo" rows={data.chapters} value={chapter} onChange={setChapter} empty="Todos" />
+        <SelectRow label="Estado de sesión" rows={rows(states).filter(({ id }) => director || id !== "draft")}
+          value={status} onChange={setStatus} empty="Todos" />
+        {director && <button type="button" onClick={() => { setEditing(emptySession); setClosing(null); }}>Nueva sesión</button>}
+      </div>
+      {editing && <SessionEditor key={editing.id ?? "new"} session={editing} data={data} entities={entities}
+        characters={characters} busy={mutation.busy} onCancel={() => setEditing(null)} onSave={async (payload) => {
+          if (await mutation.run(() => campaignChronicle.action("save_session", payload))) setEditing(null);
+        }} />}
+      {session ? <>
+        <SelectRow label="Sesión" rows={sessions.map((row) => ({ ...row, title: `${row.played_on} · ${row.title}` }))}
+          value={session.id} onChange={(id) => { setCurrent(id); setClosing(null); }} />
+        <section className="chronicle-panel" id={`session-${session.id}`}>
+          <h3>{session.title}</h3>
+          <p><time dateTime={session.played_on}>{new Date(`${session.played_on}T00:00:00`).toLocaleDateString()}</time> · {states[session.status]}
+            {session.chapter_id && <> · {data.chapters.find(({ id }) => id === session.chapter_id)?.title}</>}
+          </p>
+          <div dangerouslySetInnerHTML={{ __html: cleanSummary(session.summary) }} />
+          <dl>{Object.entries({ rewards: "Recompensas", decisions: "Decisiones", consequences: "Consecuencias" })
+            .filter(([field]) => session[field]).map(([field, label]) => <div key={field}><dt>{label}</dt><dd>{session[field]}</dd></div>)}</dl>
+          {data.attendance.some(({ session_id }) => session_id === session.id) && <p>Asistencia · {data.attendance
+            .filter(({ session_id }) => session_id === session.id)
+            .map(({ character_id }) => characters.find(({ id }) => id === character_id)?.name).filter(Boolean).join(", ")}</p>}
+          <ul className="chronicle-list">{data.links.filter(({ session_id }) => session_id === session.id).map((row) => {
+            const field = Object.keys(linkTypes).find((key) => row[key] != null);
+            const entry = entities[field].find(({ id }) => id === row[field]);
+            if (!entry) return null;
+            return <li key={row.id}>{linkTypes[field]} · <button type="button" onClick={() => openEntity(field, entry)}>{entry.title ?? entry.name}</button></li>;
+          })}</ul>
+          {director && <>
+            <details><summary>Notas privadas del director</summary>
+              <p className="chronicle-pre">{data.notes.find(({ session_id }) => session_id === session.id)?.notes}</p>
+            </details>
+            <div className="chronicle-actions">
+              <button type="button" onClick={() => { setEditing(session); setClosing(null); }}>Editar sesión</button>
+              {session.status === "draft" && <button type="button" disabled={mutation.busy}
+                onClick={() => mutation.run(() => campaignChronicle.action("publish", { session_id: session.id }))}>Publicar resumen</button>}
+              {session.status !== "closed" && <button type="button" onClick={() => { setClosing(closing === session.id ? null : session.id); setEditing(null); }}>
+                {closing === session.id ? "Cancelar cierre" : "Preparar cierre"}</button>}
+            </div>
+          </>}
+          {closing === session.id && session.status !== "closed" && <Closure key={session.id} session={session}
+            data={data} entities={entities} characters={characters} mutation={mutation} onDone={() => { setClosing(null); onClose(); }} />}
+        </section>
+      </> : <p>No hay sesiones que coincidan con los filtros.</p>}
+    </section>}
   </article>;
 }

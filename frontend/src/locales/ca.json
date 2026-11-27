@@ -8,8 +8,6 @@
     "slugHelp": "Fes servir lletres minúscules, números i guionets. Si el canvies, comparteix el nou enllaç de registre.",
     "registrationLink": "Enllaç de registre",
     "slugTaken": "Aquest identificador ja està en ús.",
-    "registerFor": "T’estàs registrant a {{name}}.",
-    "invalidRegistration": "L’enllaç de registre ja no està actiu. Demana’n un de nou a l’administració de la campanya.",
     "superadmin": "Superadministració",
     "title": "Campanyes",
     "label": "Campanya",
@@ -37,7 +35,10 @@
   },
   "nav": {
     "language": "Idioma",
-    "chronicle": "📜 Crònica",
+    "locations": "Localitzacions i mapes",
+    "chronicle": "Crònica d’aventures",
+    "inventory": "Inventari de grup",
+    "resources": "Recursos",
     "characters": "🗡️ Personatges",
     "bestiary": "🐉 Bestiari",
     "organizations": "🏰 Organitzacions",
@@ -46,6 +47,13 @@
     "login": "🔓 Entra",
     "register": "📝 Registra’t",
     "logout": "🚪 Surt"
+  },
+  "chronicleNav": {
+    "sessions": "Sessions",
+    "quests": "Missions",
+    "gallery": "Galeria",
+    "archive": "Entrades del diari",
+    "searchArchive": "Cerca al diari"
   },
   "common": {
     "loading": "S’està carregant…",

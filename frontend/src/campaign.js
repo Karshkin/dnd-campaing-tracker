@@ -102,9 +102,6 @@ export const campaignSettings = {
   setDirector(userId, director) {
     return campaignAction("director", { userId, director });
   },
-  registrationName(slug) {
-    return value(supabase.rpc("registration_campaign", { link_slug: slug }));
-  },
   async images(campaign) {
     const objects = [campaign.cover_path, campaign.emblem_path].filter(Boolean);
     if (!objects.length) return {};

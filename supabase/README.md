@@ -209,3 +209,16 @@ hasta `20261127165548` con `supabase db reset --local --version 20261127165548`
 y ejecuta `psql "$LOCAL_DATABASE_URL" -f supabase/tests/chronicle_upgrade.sql`.
 La prueba agrega datos anteriores, aplica la migración y comprueba los registros
 y la reputación inicial dentro de una transacción que revierte al terminar.
+
+### Pestañas y acceso privado
+
+Publica primero el frontend que separa **Localizaciones y mapas**, **Crónica de
+aventuras**, **Inventario grupal** y **Recursos**. Después aplica
+`20261127233057_private_campaign_registration.sql` para retirar el permiso de
+ejecución del RPC que devolvía el nombre de campaña durante el registro. Ese orden
+mantiene operativo el registro por invitación durante el despliegue. Auth sigue
+validando el enlace y asignando la membresía al crear la cuenta.
+
+Comprueba que los enlaces directos a pestañas muestran el formulario de acceso sin
+sesión, que el formulario de registro funciona con una invitación vigente y que las
+cuentas sin membresía solo ven las campañas a las que tienen acceso.
