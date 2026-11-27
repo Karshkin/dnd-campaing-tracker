@@ -394,10 +394,13 @@ async function pagedRows(query) {
 export const groupInventory = {
   async groups() {
     const [groups, memberships] = await Promise.all([
-      pagedRows(supabase.from("inventory_groups").select("id,name").order("name").order("id")),
+      pagedRows(supabase.from("inventory_groups").select("id,name,archived_at").order("name").order("id")),
       pagedRows(supabase.from("inventory_group_members").select("group_id").order("group_id")),
     ]);
     return { groups, memberIds: memberships.map((row) => row.group_id) };
+  },
+  manage(action, party, group_name = null) {
+    return value(supabase.rpc("manage_inventory_group", { action, party, group_name }));
   },
   create(name) {
     return value(supabase.rpc("create_inventory_group", { group_name: name }));
@@ -515,6 +518,22 @@ export const campaignChronicle = {
 };
 
 export const treasury = {
+  async artwork(path) {
+    if (!path) return null;
+    return (await value(supabase.storage.from("inventory-artwork").createSignedUrl(path, 900))).signedUrl;
+  },
+  async setArtwork(item, file) {
+    let path = null;
+    if (file) {
+      const extension = fileExtension(file, "cover");
+      if (!["png", "jpg", "webp", "gif", "avif"].includes(extension)) throw new Error("Formato de imagen no compatible");
+      path = `${item.campaign_id}/${item.id}/${crypto.randomUUID()}.${extension}`;
+      await value(supabase.storage.from("inventory-artwork").upload(path, file));
+    }
+    return value(supabase.rpc("set_inventory_artwork", {
+      item: item.id, path, previous_path: item.artwork_path,
+    }));
+  },
   async contents(groupId) {
     const filters = { group_id: groupId };
     return Object.fromEntries(await Promise.all(Object.entries({

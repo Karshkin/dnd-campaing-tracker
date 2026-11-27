@@ -170,6 +170,7 @@ try {
   assert.deepEqual(ok(await member.from("chronicle_notes").select()), []);
   assert.equal(ok(await director.from("treasury_history").select().eq("operation", "distribution").single()).author_id, dm.user.id);
 
+  const resource = await insert(director, "resources", { name: "Suministro anterior", quantity: 4, notes: "Existente" });
   // Exercise the app's regular browser entry points with persisted data.
   server = await createServer({ server: { host: "127.0.0.1", port: 5178, strictPort: true } });
   await server.listen();
@@ -274,6 +275,43 @@ try {
   await inventory.getByRole("spinbutton", { name: "Cantidad", exact: true }).fill("2");
   await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
+
+  const legacy = new URL(base);
+  legacy.hash = "/resources";
+  await playerPage.goto(legacy.href);
+  await playerPage.getByText("Recursos del Grupo", { exact: true }).click();
+  await playerPage.getByText(resource.name, { exact: true }).waitFor();
+  assert.equal(ok(await member.from("resources").select("quantity").eq("id", resource.id).single()).quantity, 4);
+  assert.equal(ok(await member.from("inventory_group_contributions").select("id").eq("name", resource.name)).length, 0);
+
+  await playerPage.getByLabel("Añadir imagen", { exact: true }).setInputFiles({
+    name: "amuleto.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await playerPage.getByRole("link", { name: "Ampliar imagen de Amuleto" }).waitFor();
+  const artwork = ok(await member.from("inventory_group_contributions").select("artwork_path").eq("id", groupItem.id).single()).artwork_path;
+  cleanup.push(() => admin.storage.from("inventory-artwork").remove([artwork]));
+  assert.ok((await onlooker.storage.from("inventory-artwork").createSignedUrl(artwork, 60)).error);
+  assert.ok((await onlooker.rpc("set_inventory_artwork", { item: groupItem.id, path: null, previous_path: artwork })).error);
+  ok(await movement(member, { ...itemTransfer, operation: "to_character", item_id: groupItem.id, quantity: 1 }));
+  assert.equal(ok(await member.from("character_inventory").select("artwork_path").eq("artwork_path", artwork).single()).artwork_path, artwork);
+  assert.ok(ok(await member.storage.from("inventory-artwork").createSignedUrl(artwork, 60)).signedUrl);
+
+  const manageGroup = (client, action, party, group_name = null) =>
+    client.rpc("manage_inventory_group", { action, party, group_name });
+  assert.ok((await manageGroup(member, "rename", group, "Sin permiso")).error);
+  assert.ok((await manageGroup(director, "archive", foreignGroup)).error);
+  assert.ok((await manageGroup(director, "rename", group, "   ")).error);
+  ok(await manageGroup(director, "rename", group, "Exploradores del faro"));
+  assert.equal(ok(await member.from("inventory_groups").select("name").eq("id", group).single()).name, "Exploradores del faro");
+  const impact = ok(await manageGroup(director, "impact", group));
+  assert.equal(impact.members, 1);
+  assert.equal(impact.coins.gp, 4);
+  assert.ok(impact.history > 0);
+  ok(await manageGroup(director, "archive", group));
+  assert.ok((await movement(member, deposit)).error);
+  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
 
   console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");
 } finally {
