@@ -46,10 +46,13 @@ export function CampaignSelector({ campaign, campaigns }) {
   const { t } = useTranslation();
   return (
     <div className="campaign-selector">
-      <label>{t("campaigns.label")}
-        <select value={campaign.id} onChange={(event) => openCampaign(event.target.value)}>
-          {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+      <label className="campaign-picker">
+        <span className="campaign-picker-caption">{t("campaigns.label")}</span>
+        <span className="campaign-picker-control">
+          <select value={campaign.id} onChange={(event) => openCampaign(event.target.value)}>
+            {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </span>
       </label>
       <CreateCampaign />
     </div>
