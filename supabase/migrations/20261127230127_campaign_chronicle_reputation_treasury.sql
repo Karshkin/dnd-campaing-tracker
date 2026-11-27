@@ -84,9 +84,13 @@ begin
     execute format('alter table public.%I enable row level security', relation);
     execute format('revoke all on public.%I from public, anon, authenticated', relation);
     execute format('grant select, insert, update, delete on public.%I to authenticated', relation);
-    execute format('create policy director on public.%I for all to authenticated
+    execute format('create policy director_insert on public.%I for insert to authenticated
+      with check (campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id))', relation);
+    execute format('create policy director_update on public.%I for update to authenticated
       using (campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id))
       with check (campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id))', relation);
+    execute format('create policy director_delete on public.%I for delete to authenticated
+      using (campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id))', relation);
     execute format('create index on public.%I(campaign_id)', relation);
   end loop;
 end $$;
@@ -97,18 +101,23 @@ grant insert (chapter_id,title,played_on,summary,rewards,decisions,consequences)
       update (chapter_id,title,played_on,summary,rewards,decisions,consequences)
 on public.chronicle_sessions to authenticated;
 
-create policy players_read on public.chronicle_sessions for select to authenticated
+create policy director_read on public.chronicle_notes for select to authenticated
+using (campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id));
+
+create policy chronicle_read on public.chronicle_sessions for select to authenticated
 using (campaign_id = (select campaign_private.selected_campaign())
-  and campaign_private.permitted_in(campaign_id,'tracker',1) and status in ('published','closed'));
+  and (campaign_private.is_campaign_director(campaign_id)
+    or (campaign_private.permitted_in(campaign_id,'tracker',1) and status in ('published','closed'))));
 
 do $$
 declare relation text;
 begin
   foreach relation in array array['chronicle_chapters','chronicle_attendance','chronicle_links','chronicle_quests','chronicle_images']
   loop
-    execute format('create policy players_read on public.%I for select to authenticated
+    execute format('create policy chronicle_read on public.%I for select to authenticated
       using (campaign_id = (select campaign_private.selected_campaign())
-      and campaign_private.permitted_in(campaign_id,''tracker'',1) %s)', relation,
+      and (campaign_private.is_campaign_director(campaign_id)
+        or (campaign_private.permitted_in(campaign_id,''tracker'',1) %s)))', relation,
       case when relation = 'chronicle_links' then
         'and exists (select 1 from public.chronicle_sessions s where s.id = session_id)
          and (npc_id is null or exists (select 1 from public.allies a where a.id = npc_id))
@@ -327,8 +336,9 @@ using (campaign_id = (select campaign_private.selected_campaign()) and (
 create policy treasury_history_read on public.treasury_history for select to authenticated
 using (campaign_private.treasury_group_access(campaign_id,group_id)
   and (session_id is null or exists (select 1 from public.chronicle_sessions s where s.id = session_id)));
-create policy contributions_director_read on public.inventory_group_contributions for select to authenticated
-using (campaign_private.is_campaign_director(campaign_id));
+alter policy inventory_contributions_read on public.inventory_group_contributions
+using (campaign_private.is_campaign_director(campaign_id)
+  or group_id in (select m.group_id from public.inventory_group_members m where m.user_id = (select auth.uid())));
 
 create table campaign_private.treasury_requests (
   campaign_id uuid not null references public.campaigns on delete cascade,
