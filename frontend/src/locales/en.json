@@ -98,6 +98,8 @@
     "createError": "Could not create diary entry."
   },
   "characterSheet": {
+    "noDiaryEntries": "This character has no diary entries yet.",
+    "retryDiary": "Reload diary",
     "companions": "Campaign companions",
     "noCompanions": "There are no companions in the campaign yet.",
     "title": "Character sheet",
