@@ -1,0 +1,87 @@
+.chronicle,
+.chronicle-panel {
+  display: grid;
+  gap: .85rem;
+}
+
+.chronicle-panel {
+  margin-block: .75rem;
+  padding: clamp(.7rem, 2vw, 1.25rem);
+  border: 1px solid var(--gold-dark, #9a743f);
+  border-radius: .5rem;
+}
+
+.chronicle-panel meter {
+  width: min(100%, 32rem);
+  height: 1.5rem;
+}
+
+.chronicle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .65rem;
+}
+
+.chronicle-actions label,
+.chronicle label,
+.group-inventory .chronicle-panel label {
+  display: grid;
+  gap: .25rem;
+}
+
+.chronicle-actions label:has(input[type="checkbox"]),
+.chronicle-panel label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.chronicle-editor {
+  border: 1px solid var(--gold-dark, #9a743f);
+  border-radius: .4rem;
+  padding: .75rem;
+  min-height: 8rem;
+}
+
+.chronicle-cover,
+.chronicle-gallery figure {
+  margin: 0;
+}
+
+.chronicle-cover img,
+.chronicle-gallery img {
+  display: block;
+  width: 100%;
+  object-fit: contain;
+  border-radius: .45rem;
+}
+
+.chronicle-cover img { max-height: 24rem; }
+
+.chronicle-gallery,
+.treasury-wallet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: .75rem;
+}
+
+.chronicle-gallery img { height: 8rem; }
+
+.treasury-wallet div {
+  padding: .5rem .75rem;
+  border: 1px solid var(--gold-dark, #9a743f);
+  border-radius: .35rem;
+}
+
+.treasury-wallet dd { margin: 0; font-weight: bold; }
+
+.chronicle-list {
+  display: grid;
+  gap: .5rem;
+  padding-inline-start: 1.25rem;
+}
+
+.chronicle-list button { margin-inline-start: .5rem; }
+
+.chronicle-pre { white-space: pre-wrap; }

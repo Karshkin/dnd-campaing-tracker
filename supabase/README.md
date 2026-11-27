@@ -155,3 +155,57 @@ El test usa un proyecto local desechable. Comprueba registro, sesión, administr
 persistencia, CRUD, propiedad de los personajes y acceso a Storage. Comprueba además
 desde la URL de Pages el flujo de confirmación con SMTP, porque ese recorrido depende de
 la configuración del proyecto alojado.
+
+## Crónica, reputación y tesoro grupal
+
+Antes de publicar el frontend de la issue #21, revisa y aplica
+`20261127230127_campaign_chronicle_reputation_treasury.sql` en una copia de
+preproducción. Haz una copia de la base de datos y de Storage, verifica la aplicación
+en dos campañas y coordina la aplicación de la migración en producción antes de
+fusionar la PR que publica GitHub Pages.
+
+- La crónica añade capítulos, sesiones y misiones. Las entradas anteriores siguen
+  accesibles en **Entradas del diario** y participan en la búsqueda. Las hojas de
+  personaje conservan sus diarios personales. Las notas del director se guardan en
+  una tabla separada y permanecen privadas después de publicar o cerrar.
+- El director puede publicar un resumen y completar el cierre después. El cierre
+  publica la sesión y aplica todo el reparto de botín y los cambios de reputación,
+  misiones y alineamiento de PNJ en una transacción. Una repetición del cierre de
+  una sesión cerrada mantiene el resultado de la primera ejecución.
+- La reputación empieza neutral en cada par de organización y grupo. Los jugadores
+  con acceso a Organizaciones y al grupo reciben solo la reputación visible y su
+  historial autorizado. Los ajustes se saturan en ±100 y el historial conserva la
+  diferencia solicitada y el valor aplicado.
+- Las aportaciones se conservan con su ID, cantidad y autor. Se pueden transferir
+  al inventario de un personaje usando el tesoro grupal. Las aportaciones monetarias
+  históricas tienen nombres libres y se conservan en **Monedas (legado)**. El
+  monedero de cinco denominaciones registra movimientos estructurados desde cero.
+- El tesoro admite miembros del grupo y directores de la campaña. Los jugadores
+  transfieren a sus propios personajes con permiso de edición. El director puede
+  repartir a personajes de participantes del grupo. Los movimientos se serializan por
+  campaña y se registran en la misma transacción que modifica el saldo. El cliente
+  reusa el ID de la solicitud al reintentar un mismo envío.
+- La portada y la galería usan el bucket privado `chronicle-images`. Inclúyelo en
+  las copias de Storage y comprueba que una cuenta ajena a la campaña no pueda
+  generar URLs firmadas. El editor admite un conjunto acotado de etiquetas de
+  formato y sanitiza cada resumen antes de guardarlo y de renderizarlo.
+
+El repositorio aún carece de un gestor de encuentros. Cuando exista, añade una
+referencia opcional `encounter_id` a `chronicle_links` y a `treasury_history` con
+claves foráneas compuestas por campaña e ID. Amplía las políticas de lectura para
+exigir acceso al encuentro, la validación de los RPC y los formularios. El cierre
+ya recibe el ID de sesión y pasa por la misma función de movimientos que el tesoro.
+Las referencias a PNJ usan `allies`, mientras las del bestiario usan `creatures`.
+
+Para comprobar una instalación local, carga las claves de la salida de
+`supabase status` en `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` y
+`TRACKER_TEST_SERVICE_KEY`. Desde `frontend` ejecuta `npm ci`, `npm run build`,
+`npm run test:supabase`, `npx playwright install chromium` y
+`npm run test:chronicle`. Puedes usar un Chromium del sistema configurando
+`TRACKER_TEST_CHROMIUM`.
+
+Para comprobar la conservación de datos, prepara una base local desechable
+hasta `20261127165548` con `supabase db reset --local --version 20261127165548`
+y ejecuta `psql "$LOCAL_DATABASE_URL" -f supabase/tests/chronicle_upgrade.sql`.
+La prueba agrega datos anteriores, aplica la migración y comprueba los registros
+y la reputación inicial dentro de una transacción que revierte al terminar.

@@ -427,9 +427,11 @@ export const groupInventory = {
       group_id: groupId, category, name: name.trim(), quantity: Number(quantity),
     }));
   },
-  update(groupId, id, quantity) {
-    return value(supabase.from("inventory_group_contributions").update({ quantity: Number(quantity) })
-      .eq("group_id", groupId).eq("id", id).select("id").single());
+  update(groupId, id, quantity, previousQuantity) {
+    const update = supabase.from("inventory_group_contributions").update({ quantity: Number(quantity) })
+      .eq("group_id", groupId).eq("id", id);
+    if (previousQuantity !== undefined) update.eq("quantity", previousQuantity);
+    return value(update.select("id").single());
   },
   remove(groupId, id) {
     return value(supabase.from("inventory_group_contributions").delete()
@@ -454,5 +456,83 @@ export const campaignComments = {
     return value(supabase.from("campaign_comments").insert({
       [commentTargets[collection]]: id, author_character_id: authorId, body: body.trim(),
     }));
+  },
+};
+
+export const campaignChronicle = {
+  list(table, order, filters = {}) {
+    let query = supabase.from(table).select("*");
+    for (const [field, filter] of Object.entries(filters)) query = query.eq(field, filter);
+    return pagedRows(query.order(order).order("id"));
+  },
+  notes() {
+    return pagedRows(supabase.from("chronicle_notes").select().order("session_id"));
+  },
+  attendance() {
+    return pagedRows(supabase.from("chronicle_attendance").select().order("session_id").order("character_id"));
+  },
+  factions(id) {
+    return Promise.all([
+      pagedRows(supabase.from("faction_reputation").select().eq("organization_id", id).order("group_id")),
+      pagedRows(supabase.from("faction_reputation_history").select().eq("organization_id", id)
+        .order("created_at", { ascending: false }).order("id")),
+      groupInventory.groups(),
+      campaignChronicle.list("chronicle_sessions", "played_on"),
+    ]);
+  },
+  action(action, payload) {
+    return value(supabase.rpc("campaign_rework", { action, payload }));
+  },
+  save(table, fields, id) {
+    const source = supabase.from(table);
+    return value((id ? source.update(fields).eq("id", id) : source.insert(fields)).select().single());
+  },
+  async images() {
+    const rows = await campaignChronicle.list("chronicle_images", "cover");
+    const images = [];
+    const storage = supabase.storage.from("chronicle-images");
+    for (let start = 0; start < rows.length; start += 100) {
+      const page = rows.slice(start, start + 100);
+      const urls = new Map((await value(storage.createSignedUrls(page.map((r) => r.object_path), 900)))
+        .map((image) => [image.path, image.signedUrl]));
+      images.push(...page.map((r) => ({ ...r, url: urls.get(r.object_path) })));
+    }
+    return images;
+  },
+  async addImage(campaignId, file, caption) {
+    const extension = fileExtension(file, "cover");
+    const path = `${campaignId}/${crypto.randomUUID()}.${extension}`;
+    const storage = supabase.storage.from("chronicle-images");
+    await value(storage.upload(path, file));
+    try {
+      await campaignChronicle.save("chronicle_images", { object_path: path, caption });
+    } catch (error) {
+      await removeFiles([path], storage);
+      throw error;
+    }
+  },
+  async removeImage(id) {
+    const row = await value(supabase.from("chronicle_images").delete().eq("id", id).select("object_path").single());
+    await removeFiles([row.object_path], supabase.storage.from("chronicle-images"));
+  },
+};
+
+export const treasury = {
+  async contents(groupId) {
+    const filters = { group_id: groupId };
+    return Object.fromEntries(await Promise.all(Object.entries({
+      wallet: ["treasury_wallet", "denomination"],
+      items: ["inventory_group_contributions", "name"],
+      history: ["treasury_history", "created_at"],
+    }).map(async ([key, [table, order]]) => [key, await campaignChronicle.list(table, order, filters)])));
+  },
+  personal(characterId) {
+    return Promise.all([
+      campaignChronicle.list("character_inventory", "item_name", { character_id: characterId }),
+      campaignChronicle.list("treasury_wallet", "denomination", { character_id: characterId }),
+    ]);
+  },
+  move(movements, sessionId, requestId) {
+    return campaignChronicle.action("treasury", { movements, session_id: sessionId || null, request_id: requestId });
   },
 };

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { groupInventory } from "./campaign";
+import { Treasury } from "./Treasury";
 import "./group-inventory.css";
 
 const categories = ["coins", "equipment", "consumables", "materials", "other"];
 const blankItem = { name: "", category: "coins", quantity: "1" };
 const collate = (rows, category) => rows.filter((row) => row.category === category);
 
-function ActiveInventory({ groupId, userId }) {
+function ActiveInventory({ groupId, userId, revision, onChange }) {
   const { t, i18n } = useTranslation();
   const [tables, setTables] = useState(null);
   const [draft, setDraft] = useState(blankItem);
@@ -36,13 +37,14 @@ function ActiveInventory({ groupId, userId }) {
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [refresh]);
+  }, [refresh, revision]);
 
   async function mutate(action) {
     setBusy(true);
     setError("");
     try {
       await action();
+      onChange();
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -111,21 +113,21 @@ function ActiveInventory({ groupId, userId }) {
                   <form onSubmit={(event) => {
                     event.preventDefault();
                     mutate(async () => {
-                      await groupInventory.update(groupId, row.id, editing.quantity);
+                      await groupInventory.update(groupId, row.id, editing.quantity, editing.previousQuantity);
                       setEditing(null);
                     });
                   }}>
                     <label>
                       {t("resources.quantity")}
                       <input type="number" min={1} max={1000000000} required value={editing.quantity}
-                        onChange={(event) => setEditing({ id: row.id, quantity: event.target.value })} />
+                        onChange={(event) => setEditing({ ...editing, quantity: event.target.value })} />
                     </label>
                     <button type="submit" disabled={busy}>{t("common.save")}</button>
                     <button type="button" onClick={() => setEditing(null)}>{t("common.cancel")}</button>
                   </form>
                 ) : (
                   <div className="group-inventory-actions">
-                    <button type="button" disabled={busy} onClick={() => setEditing({ id: row.id, quantity: row.quantity })}>{t("common.edit")}</button>
+                    <button type="button" disabled={busy} onClick={() => setEditing({ id: row.id, quantity: row.quantity, previousQuantity: row.quantity })}>{t("common.edit")}</button>
                     <button type="button" disabled={busy} onClick={() => {
                       if (window.confirm(t("groupInventory.removeConfirm"))) {
                         mutate(() => groupInventory.remove(groupId, row.id));
@@ -142,7 +144,7 @@ function ActiveInventory({ groupId, userId }) {
   );
 }
 
-export function GroupInventory({ userId }) {
+export function GroupInventory({ userId, characters, director, revision }) {
   const { t } = useTranslation();
   const [groups, setGroups] = useState(null);
   const [memberIds, setMemberIds] = useState([]);
@@ -194,6 +196,8 @@ export function GroupInventory({ userId }) {
     }
   }
 
+  const [moves, setMoves] = useState(0);
+  const [contributionChanges, setContributionChanges] = useState(0);
   const joined = memberIds.includes(selection);
   return (
     <section className="character-sheet-panel group-inventory">
@@ -247,9 +251,13 @@ export function GroupInventory({ userId }) {
               })}>{t("groupInventory.join")}</button>
             )}
           </div>
-          {joined ? <ActiveInventory key={selection} groupId={selection} userId={userId} /> : (
-            <p>{t("groupInventory.joinHint")}</p>
-          )}
+          {(joined || director) && <Treasury key={selection} groupId={selection} characters={characters}
+            revision={revision + contributionChanges} onMove={() => setMoves((count) => count + 1)} />}
+          {joined && <details><summary>Aportaciones y totales</summary>
+            <ActiveInventory key={selection} groupId={selection} userId={userId}
+              revision={revision + moves} onChange={() => setContributionChanges((count) => count + 1)} />
+          </details>}
+          {!joined && !director && <p>{t("groupInventory.joinHint")}</p>}
         </>
       )}
     </section>

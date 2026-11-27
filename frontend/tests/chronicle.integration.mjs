@@ -1,0 +1,257 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { chromium } from "playwright";
+import { createServer } from "vite";
+
+const { VITE_SUPABASE_URL: url, VITE_SUPABASE_PUBLISHABLE_KEY: key, TRACKER_TEST_SERVICE_KEY: serviceKey } = process.env;
+assert.ok(url && key && serviceKey, "Set the local Supabase URL, publishable key and test service key");
+assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname), "Use a disposable local Supabase project");
+
+const options = { auth: { persistSession: false, autoRefreshToken: false } };
+const admin = createClient(url, serviceKey, options);
+const run = randomUUID().slice(0, 8);
+const password = `Test-${run}!23`;
+const cleanup = [];
+let server;
+let browser;
+
+function ok({ data, error }) {
+  assert.ifError(error);
+  return data;
+}
+
+async function account(name, superadmin = false) {
+  const username = `${name} ${run}`;
+  const email = `${name}-${run}@example.com`.toLowerCase();
+  const { user } = ok(await admin.auth.admin.createUser({
+    email, password, email_confirm: true, user_metadata: { username },
+  }));
+  cleanup.push(() => admin.auth.admin.deleteUser(user.id));
+  if (superadmin) ok(await admin.from("profiles").update({ is_admin: true }).eq("id", user.id));
+  const login = createClient(url, key, options);
+  const { session } = ok(await login.auth.signInWithPassword({ email, password }));
+  return { user, email, username, session, login };
+}
+
+async function scope(account, campaignId) {
+  const client = createClient(url, key, { ...options, global: { headers: { "x-campaign-id": campaignId } } });
+  ok(await client.auth.setSession(account.session));
+  return client;
+}
+
+async function insert(client, table, row) {
+  return ok(await client.from(table).insert(row).select().single());
+}
+
+const action = (client, name, payload) => client.rpc("campaign_rework", { action: name, payload });
+const movement = (client, row, request_id = randomUUID()) => action(client, "treasury", {
+  request_id, movements: Array.isArray(row) ? row : [row],
+});
+
+try {
+  const dm = await account("Director", true);
+  const player = await account("Player");
+  const spectator = await account("Spectator");
+  const slug = `chronicle-${run}`;
+  const campaignId = ok(await dm.login.rpc("manage_campaign", { action: "create", payload: { name: slug } }));
+  const otherId = ok(await dm.login.rpc("manage_campaign", { action: "create", payload: { name: `other-${run}` } }));
+  cleanup.push(() => admin.from("campaigns").delete().in("id", [campaignId, otherId]));
+  const director = await scope(dm, campaignId);
+  const other = await scope(dm, otherId);
+  const member = await scope(player, campaignId);
+  const onlooker = await scope(spectator, campaignId);
+  const outside = await scope(player, otherId);
+  for (const actor of [player, spectator]) {
+    ok(await director.rpc("manage_campaign", { action: "invite", payload: { username: actor.username } }));
+    for (const pageKey of ["tracker", "characters", "organizations"]) {
+      ok(await director.rpc("manage_campaign", {
+        action: "permission", payload: { userId: actor.user.id, pageKey, permission_level: "edit" },
+      }));
+    }
+  }
+
+  const group = ok(await member.rpc("create_inventory_group", { group_name: "Exploradores" }));
+  const foreignGroup = ok(await other.rpc("create_inventory_group", { group_name: "Exploradores" }));
+  const faction = await insert(director, "organizations", { name: "Círculo del faro" });
+  const character = await insert(member, "characters", { name: "Niebla" });
+  const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
+  const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
+  const foreignNpc = await insert(other, "allies", { name: "Vigía remoto", alignment: "neutral" });
+  const chapter = await insert(director, "chronicle_chapters", { title: "El faro" });
+  const foreignChapter = await insert(other, "chronicle_chapters", { title: "Otro faro" });
+  const sessionDraft = {
+    title: "Tormenta azul", played_on: "2026-11-26", chapter_id: chapter.id,
+    summary: "<p>Hallamos el <strong>faro</strong>.</p>", rewards: "Tres monedas", decisions: "Navegar", consequences: "La marea sube",
+    notes: "El vigía conoce la ruta", attendance: [character.id], links: [{ npc_id: npc.id }, { organization_id: faction.id }],
+  };
+  assert.ok((await action(member, "save_session", sessionDraft)).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, chapter_id: foreignChapter.id })).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, links: [{ npc_id: foreignNpc.id }] })).error);
+  ok(await action(director, "save_session", sessionDraft));
+  const session = ok(await director.from("chronicle_sessions").select().single());
+  ok(await director.from("chronicle_sessions").update({
+    summary: '<p style="color: green">Hallamos el <strong>faro</strong>.</p>',
+  }).eq("id", session.id));
+  assert.deepEqual(ok(await member.from("chronicle_sessions").select()), []);
+  assert.deepEqual(ok(await member.from("chronicle_notes").select()), []);
+  assert.deepEqual(ok(await member.from("chronicle_attendance").select()), []);
+  assert.equal(ok(await director.from("chronicle_notes").select().single()).notes, sessionDraft.notes);
+
+  const reputation = { organization_id: faction.id, group_id: group };
+  const score = async (client = member) => ok(await client.from("faction_reputation").select().eq("group_id", group));
+  assert.equal((await score())[0].score, 0);
+  assert.deepEqual(await score(onlooker), []);
+  assert.deepEqual(await score(outside), []);
+  assert.ok((await action(member, "reputation", { ...reputation, delta: 5, reason: "No autorizado" })).error);
+  assert.ok((await action(director, "reputation", { ...reputation, delta: 5, reason: "    " })).error);
+  assert.ok((await action(director, "reputation", { ...reputation, group_id: foreignGroup, delta: 5, reason: "Otra campaña" })).error);
+  ok(await action(director, "reputation", { ...reputation, delta: 2147483647, reason: "Rescate", session_id: session.id }));
+  assert.equal((await score())[0].score, 100);
+  assert.deepEqual(ok(await member.from("faction_reputation_history").select()), []);
+  ok(await action(director, "reputation", { ...reputation, delta: -2147483648, reason: "Traición" }));
+  assert.equal((await score())[0].score, -100);
+  ok(await action(director, "reputation", { ...reputation, visible: false }));
+  assert.deepEqual(await score(), []);
+  assert.deepEqual(ok(await member.from("faction_reputation_history").select()), []);
+  ok(await action(director, "reputation", { ...reputation, visible: true }));
+  assert.equal(ok(await member.from("faction_reputation_history").select().single()).requested, -2147483648);
+
+  const deposit = { group_id: group, operation: "deposit", denomination: "gp", quantity: 10 };
+  assert.ok((await movement(onlooker, deposit)).error);
+  assert.ok((await movement(member, { ...deposit, group_id: foreignGroup })).error);
+  const retry = randomUUID();
+  const duplicates = await Promise.all([movement(member, deposit, retry), movement(member, deposit, retry)]);
+  duplicates.forEach(ok);
+  assert.ok((await movement(member, { ...deposit, quantity: 11 }, retry)).error);
+  const wallet = async (client, column, id) => ok(await client.from("treasury_wallet").select("balance").eq(column, id).eq("denomination", "gp").single()).balance;
+  assert.equal(await wallet(member, "group_id", group), 10);
+
+  const transfer = { ...deposit, operation: "to_character", character_id: character.id, quantity: 7 };
+  assert.ok((await movement(member, { ...transfer, character_id: otherCharacter.id })).error);
+  const parallel = await Promise.all([movement(member, transfer), movement(member, transfer)]);
+  assert.equal(parallel.filter(({ error }) => !error).length, 1);
+  assert.equal(await wallet(member, "group_id", group), 3);
+  assert.equal(await wallet(member, "character_id", character.id), 7);
+  assert.deepEqual(ok(await onlooker.from("treasury_wallet").select().eq("character_id", character.id)), []);
+  ok(await movement(member, { ...transfer, operation: "to_group", quantity: 3 }));
+  assert.equal(await wallet(member, "group_id", group), 6);
+
+  const personalItem = await insert(member, "character_inventory", {
+    character_id: character.id, item_name: "Amuleto", quantity: 2, description: "De coral",
+  });
+  const itemTransfer = { group_id: group, character_id: character.id, quantity: 2, operation: "to_group", item_id: personalItem.id };
+  const itemRaces = await Promise.all([movement(member, itemTransfer), movement(member, itemTransfer)]);
+  assert.equal(itemRaces.filter(({ error }) => !error).length, 1);
+  const groupItem = ok(await member.from("inventory_group_contributions").select().eq("group_id", group).single());
+  assert.equal(groupItem.details.description, "De coral");
+  ok(await movement(member, { ...itemTransfer, operation: "to_character", item_id: groupItem.id, quantity: 1 }));
+  assert.equal(ok(await member.from("character_inventory").select().eq("character_id", character.id).single()).description, "De coral");
+
+  const quest = await insert(director, "chronicle_quests", { title: "Encontrar el faro" });
+  const closure = {
+    session_id: session.id, movements: [{ ...transfer, operation: "distribution", quantity: 2 }],
+    reputation: [{ ...reputation, delta: 5, reason: "Misión cumplida" }],
+    quests: [{ id: quest.id, status: "completed" }], npcs: [{ id: npc.id, alignment: "allied" }],
+  };
+  assert.ok((await action(member, "close", closure)).error);
+  assert.ok((await action(director, "close", { ...closure, npcs: [{ id: foreignNpc.id, alignment: "allied" }] })).error);
+  assert.equal(await wallet(member, "group_id", group), 6);
+  assert.equal((await score())[0].score, -100);
+  assert.equal(ok(await director.from("chronicle_quests").select().single()).status, "active");
+  assert.deepEqual(ok(await member.from("chronicle_sessions").select()), []);
+  (await Promise.all([action(director, "close", closure), action(director, "close", closure)])).forEach(ok);
+  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(ok(await member.from("chronicle_sessions").select().single()).status, "closed");
+  assert.equal(ok(await member.from("chronicle_quests").select().single()).status, "completed");
+  assert.equal(ok(await director.from("allies").select().eq("id", npc.id).single()).alignment, "allied");
+  assert.equal((await score())[0].score, -95);
+  assert.deepEqual(ok(await member.from("chronicle_notes").select()), []);
+  assert.equal(ok(await director.from("treasury_history").select().eq("operation", "distribution").single()).author_id, dm.user.id);
+
+  // Exercise the app's regular browser entry points with persisted data.
+  server = await createServer({ server: { host: "127.0.0.1", port: 5178, strictPort: true } });
+  await server.listen();
+  browser = await chromium.launch({ executablePath: process.env.TRACKER_TEST_CHROMIUM || undefined });
+  const page = await browser.newPage({ locale: "es-ES" });
+  page.on("pageerror", (error) => console.error(error));
+  const base = new URL(server.config.base, "http://127.0.0.1:5178");
+  base.searchParams.set("campaign", slug);
+  async function openAs(actor) {
+    const loginUrl = new URL(base);
+    loginUrl.hash = "/login";
+    await page.goto(loginUrl.href);
+    await page.getByPlaceholder("Correo", { exact: false }).fill(actor.email);
+    await page.locator('input[type="password"]').fill(password);
+    await page.locator('button[type="submit"]').click();
+    await page.getByRole("heading", { name: "Crónica de aventuras" }).waitFor();
+  }
+
+  await openAs(dm);
+  const chronicle = page.locator(".chronicle");
+  await chronicle.getByText("Galería", { exact: true }).click();
+  await chronicle.getByLabel("Imagen", { exact: true }).setInputFiles({
+    name: "faro.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await chronicle.getByLabel("Pie de foto", { exact: true }).fill("El faro al alba");
+  await chronicle.getByRole("button", { name: "Subir imagen", exact: true }).click();
+  const useCover = chronicle.getByRole("button", { name: "Usar en portada", exact: true });
+  await useCover.waitFor();
+  const image = ok(await director.from("chronicle_images").select().single());
+  cleanup.push(() => admin.storage.from("chronicle-images").remove([image.object_path]));
+  const publicClient = createClient(url, key, options);
+  assert.ok((await publicClient.storage.from("chronicle-images").createSignedUrl(image.object_path, 60)).error);
+  await useCover.click();
+  await page.waitForFunction(() => {
+    const cover = document.querySelector(".chronicle-cover img");
+    return cover?.complete && cover.naturalWidth > 0;
+  });
+  await page.getByRole("button", { name: "Nueva sesión", exact: true }).click();
+  await page.getByLabel("Título", { exact: true }).fill("Epílogo");
+  await page.getByLabel("Fecha", { exact: true }).fill("2026-11-27");
+  await page.getByRole("textbox", { name: "Resumen", exact: true }).fill("Al alba");
+  await page.getByLabel("Notas privadas del director", { exact: true }).fill("Solo DM");
+  await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
+  await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Publicar resumen", exact: true }).click();
+  await page.getByText("Al alba", { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector(".chronicle .chronicle-panel time")?.parentElement.textContent.includes("Publicada"));
+  await page.getByRole("searchbox", { name: "Buscar en la crónica" }).fill("Tormenta");
+  await page.getByRole("heading", { name: "Tormenta azul", exact: true }).waitFor();
+  assert.equal(await page.locator('.chronicle-panel p[style="color: green"]').count(), 0);
+  await page.locator(".chronicle-panel strong").filter({ hasText: "faro" }).waitFor();
+  await page.getByRole("button", { name: "Círculo del faro", exact: true }).click();
+  await page.getByRole("heading", { name: "Reputación", exact: true }).waitFor();
+  await page.getByLabel("Motivo", { exact: true }).fill("Ayuda en la costa");
+  await page.getByRole("button", { name: "+5", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector("meter")?.value === -90);
+
+  await browser.close();
+  browser = await chromium.launch({ executablePath: process.env.TRACKER_TEST_CHROMIUM || undefined });
+  const playerPage = await browser.newPage({ locale: "es-ES" });
+  const loginUrl = new URL(base);
+  loginUrl.hash = "/login";
+  await playerPage.goto(loginUrl.href);
+  await playerPage.getByPlaceholder("Correo", { exact: false }).fill(player.email);
+  await playerPage.locator('input[type="password"]').fill(password);
+  await playerPage.locator('button[type="submit"]').click();
+  await playerPage.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
+  assert.equal(await playerPage.getByText("Solo DM", { exact: true }).count(), 0);
+  assert.equal(await playerPage.getByRole("button", { name: "Nueva sesión", exact: true }).count(), 0);
+  await playerPage.getByRole("heading", { name: "Monedero", exact: true }).waitFor();
+  const inventory = playerPage.locator(".group-inventory");
+  assert.match(await inventory.locator(".treasury-wallet").textContent(), /Oro4/);
+  await inventory.getByText("Ingresos, transferencias y reparto", { exact: true }).click();
+  await inventory.getByLabel("Tipo", { exact: true }).selectOption("sp");
+  await inventory.getByRole("spinbutton", { name: "Cantidad", exact: true }).fill("2");
+  await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
+  await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
+
+  console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");
+} finally {
+  await browser?.close();
+  await server?.close();
+  for (const remove of cleanup.reverse()) await remove();
+}
