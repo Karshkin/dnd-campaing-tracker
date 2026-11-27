@@ -48,7 +48,12 @@ siguen reservados a sus propietarios. Los jugadores con acceso a Personajes ven 
 lista de compañeros con su nombre, emoji, raza, clase, nivel y propietario. La sección
 Admin reúne las cuentas y los permisos. La creación de criaturas, PNJ y organizaciones
 está en cada sección para quienes pueden editarla. La carga y eliminación de mapas está
-en la Crónica para quienes tienen permiso de administración.
+en la Crónica para quienes tienen permiso de administración. Los jugadores con acceso
+a la Crónica pueden crear grupos abiertos o unirse a ellos en Recursos. El inventario
+común suma aportaciones por categoría y nombre. Cada miembro puede corregir o retirar
+sus propias aportaciones. Las aportaciones quedan en el grupo cuando un miembro sale. Los comentarios
+en mapas, personajes, criaturas, PNJ y organizaciones los puede leer quien tenga
+permiso para ver la sección. Solo se puede firmar con un personaje propio.
 
 ## 2. Importar una campaña existente, si la hay
 

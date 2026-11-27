@@ -322,3 +322,76 @@ export async function campaignRequest(path, { method = "GET", body } = {}) {
     return { ok: false, json: async () => ({ detail: error.message }) };
   }
 }
+
+async function pagedRows(query) {
+  const rows = [];
+  const size = 1000;
+  for (let offset = 0; ; offset += size) {
+    const page = await value(query.range(offset, offset + size - 1));
+    rows.push(...page);
+    if (page.length < size) return rows;
+  }
+}
+
+export const groupInventory = {
+  async groups() {
+    const [groups, memberships] = await Promise.all([
+      pagedRows(supabase.from("inventory_groups").select("id,name").order("name").order("id")),
+      pagedRows(supabase.from("inventory_group_members").select("group_id").order("group_id")),
+    ]);
+    return { groups, memberIds: memberships.map((row) => row.group_id) };
+  },
+  create(name) {
+    return value(supabase.rpc("create_inventory_group", { group_name: name }));
+  },
+  join(groupId) {
+    return value(supabase.from("inventory_group_members").upsert({ group_id: groupId }, {
+      onConflict: "group_id,user_id", ignoreDuplicates: true,
+    }));
+  },
+  leave(groupId) {
+    return value(supabase.from("inventory_group_members").delete().eq("group_id", groupId));
+  },
+  async contents(groupId, userId) {
+    const [totals, mine] = await Promise.all([
+      pagedRows(supabase.from("inventory_group_totals").select("category,item_key,name,quantity")
+        .eq("group_id", groupId).order("category").order("item_key")),
+      pagedRows(supabase.from("inventory_group_contributions").select("id,category,name,quantity")
+        .eq("group_id", groupId).eq("contributed_by", userId).order("id", { ascending: false })),
+    ]);
+    return { totals, mine };
+  },
+  add(groupId, { category, name, quantity }) {
+    return value(supabase.from("inventory_group_contributions").insert({
+      group_id: groupId, category, name: name.trim(), quantity: Number(quantity),
+    }));
+  },
+  update(groupId, id, quantity) {
+    return value(supabase.from("inventory_group_contributions").update({ quantity: Number(quantity) })
+      .eq("group_id", groupId).eq("id", id).select("id").single());
+  },
+  remove(groupId, id) {
+    return value(supabase.from("inventory_group_contributions").delete()
+      .eq("group_id", groupId).eq("id", id).select("id").single());
+  },
+};
+
+const commentTargets = {
+  maps: "map_id",
+  characters: "character_id",
+  creatures: "creature_id",
+  allies: "ally_id",
+  organizations: "organization_id",
+};
+
+export const campaignComments = {
+  list(collection, id) {
+    return pagedRows(supabase.from("campaign_comments").select("id,author_name,body,created_at")
+      .eq(commentTargets[collection], id).order("id", { ascending: false }));
+  },
+  add(collection, id, authorId, body) {
+    return value(supabase.from("campaign_comments").insert({
+      [commentTargets[collection]]: id, author_character_id: authorId, body: body.trim(),
+    }));
+  },
+};
