@@ -6,7 +6,7 @@ import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
 import { CampaignAppearance, CampaignSelector, CampaignWorkspace } from "./CampaignWorkspace";
-import { campaignRequest, readProfile, supabase } from "./campaign";
+import { campaignLink, campaignRequest, campaignSettings, readProfile, selectedCampaignRef, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
 const PERMISSION_RANK = { none: 0, view: 1, edit: 2, admin: 3 };
@@ -276,7 +276,7 @@ function App() {
   );
 }
 
-function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
+function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin = false, onSaved }) {
   const [activeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
     ? "tracker"
     : parseView());
@@ -460,6 +460,18 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
     }
   };
 
+  const [registrationName, setRegistrationName] = useState("");
+  useEffect(() => {
+    if (isAuthenticated || activeView !== "register" || !selectedCampaignRef) return;
+    let active = true;
+    campaignSettings.registrationName(selectedCampaignRef).then((name) => {
+      if (active) setRegistrationName(name);
+    }).catch(() => {
+      if (active) setRegistrationName("");
+    });
+    return () => { active = false; };
+  }, [activeView, isAuthenticated]);
+
   const register = async (event) => {
     event.preventDefault();
     setRegisterError("");
@@ -474,13 +486,21 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
 
     setAuthBusy(true);
     try {
+      const signupSlug = selectedCampaignRef;
+      if (signupSlug && !await campaignSettings.registrationName(signupSlug)) {
+        setRegisterError(t("campaigns.invalidRegistration"));
+        return;
+      }
       const email = registerData.email.trim();
       const { data, error } = await supabase.auth.signUp({
         email,
         password: registerData.password,
         options: {
-          data: { username: registerData.username.trim() },
-          emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href,
+          data: {
+            username: registerData.username.trim(),
+            ...(signupSlug ? { campaign_slug: signupSlug } : {}),
+          },
+          emailRedirectTo: campaignLink(signupSlug).href,
         },
       });
       if (error) {
@@ -491,6 +511,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
       setLoginData({ email, password: "" });
       if (!data.session) setRegisterNotice(t("auth.confirmEmail"));
       navigate(data.session ? "tracker" : "login");
+    } catch (error) {
+      setRegisterError(error.message);
     } finally {
       setAuthBusy(false);
     }
@@ -1120,6 +1142,16 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
     setUserManagementError(await readErrorMessage(response, t('admin.updatePermissionError')));
   };
 
+  const updateCampaignDirector = async (id, director) => {
+    setUserManagementError("");
+    try {
+      await campaignSettings.setDirector(id, director);
+      await loadUsers();
+    } catch (error) {
+      setUserManagementError(error.message);
+    }
+  };
+
   const removeMember = async (id) => {
     if (!window.confirm(t("campaigns.removeConfirm"))) return;
     setUserManagementError("");
@@ -1139,7 +1171,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
             {campaign?.description && <p className="campaign-description">{campaign.description}</p>}
           </div>
         </div>
-        {campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} />}
+        {campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} isSuperadmin={isSuperadmin} />}
         <div className="tabs">
           <LanguagePicker />
           {(!isAuthenticated || hasPagePermission("tracker", "view") || canManageAdmin) && (
@@ -1237,6 +1269,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
         <section className="grid">
           <article className="card">
             <h2>{t('auth.register')}</h2>
+            {registrationName && <p>{t("campaigns.registerFor", { name: registrationName })}</p>}
+            {registrationName === null && <p className="error">{t("campaigns.invalidRegistration")}</p>}
             <form onSubmit={register} className="form">
               <input
                 value={registerData.username}
@@ -1267,7 +1301,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
                 placeholder={t('auth.confirmPassword')}
                 required
               />
-              <button type="submit" disabled={authBusy}>{t('auth.register')}</button>
+              <button type="submit" disabled={authBusy || registrationName === null}>{t('auth.register')}</button>
             </form>
             {registerError ? <p className="error">{registerError}</p> : null}
             <p>
@@ -2366,6 +2400,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
           )}
           <article className="card wide">
             <h2>{t('admin.userManagement')}</h2>
+            {isSuperadmin && <p>{t("campaigns.superadmin")}</p>}
             <form onSubmit={inviteMember} className="form">
               <label>{t("campaigns.inviteLabel")}
                 <input value={inviteName} onChange={(event) => setInviteName(event.target.value)}
@@ -2415,7 +2450,14 @@ function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
                             );
                           })}
                           <td>
-                            {user.is_admin ? t("campaigns.director") : user.id !== currentUser?.id && (
+                            {isSuperadmin && user.id !== currentUser?.id ? (
+                              <label>
+                                <input type="checkbox" checked={user.is_admin}
+                                  onChange={(event) => updateCampaignDirector(user.id, event.target.checked)} />
+                                {t("campaigns.director")}
+                              </label>
+                            ) : user.is_admin && t("campaigns.director")}
+                            {!user.is_admin && user.id !== currentUser?.id && (
                               <button type="button" onClick={() => removeMember(user.id)}>{t("campaigns.removeMember")}</button>
                             )}
                           </td>

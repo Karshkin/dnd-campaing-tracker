@@ -4,6 +4,13 @@
     "subtitle": "Tome of Adventures"
   },
   "campaigns": {
+    "slug": "Link identifier",
+    "slugHelp": "Use lowercase letters, numbers, and hyphens. Share the new registration link if you change it.",
+    "registrationLink": "Registration link",
+    "slugTaken": "This identifier is already in use.",
+    "registerFor": "You’re registering for {{name}}.",
+    "invalidRegistration": "This registration link is no longer active. Ask a campaign administrator for a new one.",
+    "superadmin": "Superadmin",
     "title": "Campaigns",
     "label": "Campaign",
     "create": "Create campaign",
@@ -23,7 +30,7 @@
     "invite": "Add to campaign",
     "inviteError": "Could not add the member.",
     "membership": "Membership",
-    "director": "Campaign director",
+    "director": "Campaign administrator",
     "removeMember": "Remove from campaign",
     "removeConfirm": "Remove this member from the campaign?",
     "removeError": "Could not remove the member."

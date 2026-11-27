@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { campaignSettings, selectedCampaignId, supabase } from "./campaign";
+import { campaignLink, campaignSettings, replaceCampaignRef, selectedCampaignRef, supabase } from "./campaign";
 import "./campaign-workspace.css";
 
-function openCampaign(id, keepView = false) {
+function openCampaign(slug, keepView = false) {
   const location = new URL(window.location.href);
-  location.searchParams.set("campaign", id);
+  location.searchParams.set("campaign", slug);
   if (!keepView) location.hash = "";
   window.location.replace(location);
 }
@@ -42,19 +42,19 @@ function CreateCampaign() {
   );
 }
 
-export function CampaignSelector({ campaign, campaigns }) {
+export function CampaignSelector({ campaign, campaigns, isSuperadmin }) {
   const { t } = useTranslation();
   return (
     <div className="campaign-selector">
       <label className="campaign-picker">
         <span className="campaign-picker-caption">{t("campaigns.label")}</span>
         <span className="campaign-picker-control">
-          <select value={campaign.id} onChange={(event) => openCampaign(event.target.value)}>
-            {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <select value={campaign.slug} onChange={(event) => openCampaign(event.target.value)}>
+            {campaigns.map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
           </select>
         </span>
       </label>
-      <CreateCampaign />
+      {isSuperadmin && <CreateCampaign />}
     </div>
   );
 }
@@ -62,23 +62,28 @@ export function CampaignSelector({ campaign, campaigns }) {
 export function CampaignWorkspace({ userId, children }) {
   const { t } = useTranslation();
   const [campaigns, setCampaigns] = useState(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [images, setImages] = useState({});
-  const campaign = campaigns?.find((item) => item.id === selectedCampaignId);
+  const campaign = campaigns?.find((item) => item.slug === selectedCampaignRef || item.id === selectedCampaignRef);
   const storageKey = `campaign-selection:${userId}`;
 
   useEffect(() => {
     let active = true;
-    campaignSettings.list(userId).then((accessible) => {
+    campaignSettings.list().then(({ campaigns: accessible, is_superadmin }) => {
       if (!active) return;
-      const match = accessible.find((item) => item.id === selectedCampaignId);
+      const match = accessible.find((item) => item.slug === selectedCampaignRef || item.id === selectedCampaignRef);
       if (!match && accessible.length) {
         const remembered = accessible.find((item) => item.id === localStorage.getItem(storageKey));
-        openCampaign((remembered ?? accessible[0]).id, !selectedCampaignId);
+        openCampaign((remembered ?? accessible[0]).slug, !selectedCampaignRef);
         return;
       }
-      if (match) localStorage.setItem(storageKey, match.id);
+      if (match) {
+        if (selectedCampaignRef !== match.slug) replaceCampaignRef(match.slug);
+        localStorage.setItem(storageKey, match.id);
+      }
+      setIsSuperadmin(is_superadmin);
       setCampaigns(accessible);
       setError("");
     }).catch((err) => {
@@ -107,22 +112,25 @@ export function CampaignWorkspace({ userId, children }) {
         {error ? <p role="alert" className="error">{error}</p>
           : !campaigns ? <p role="status">{t("common.loading")}</p>
             : <p>{t("campaigns.empty")}</p>}
-        {campaigns && <CreateCampaign />}
+        {campaigns && isSuperadmin && <CreateCampaign />}
         <button type="button" onClick={() => setReload((current) => current + 1)}>{t("campaigns.refresh")}</button>
         <button type="button" onClick={() => supabase.auth.signOut({ scope: "local" })}>{t("nav.logout")}</button>
       </section>
     </main>
   );
   return children({
-    campaign, campaigns, images,
-    onSaved: (saved) => setCampaigns((current) => current.map((item) => item.id === saved.id ? saved : item)),
+    campaign, campaigns, images, isSuperadmin,
+    onSaved: (saved) => {
+      if (saved.slug !== selectedCampaignRef) replaceCampaignRef(saved.slug);
+      setCampaigns((current) => current.map((item) => item.id === saved.id ? saved : item));
+    },
   });
 }
 
 export function CampaignAppearance({ campaign, images, onSaved }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState({
-    name: campaign.name, description: campaign.description, theme: campaign.theme, accent: campaign.accent,
+    name: campaign.name, slug: campaign.slug, description: campaign.description, theme: campaign.theme, accent: campaign.accent,
   });
   const [artwork, setArtwork] = useState({});
   const [previews, setPreviews] = useState({});
@@ -145,10 +153,11 @@ export function CampaignAppearance({ campaign, images, onSaved }) {
     try {
       const saved = await campaignSettings.save(campaign, { ...draft, name: draft.name.trim() }, artwork);
       onSaved(saved);
+      setDraft((current) => ({ ...current, slug: saved.slug }));
       setArtwork({});
       setNotice(t("campaigns.saved"));
     } catch (err) {
-      setError(err.message);
+      setError(err.code === "23505" ? t("campaigns.slugTaken") : err.message);
     } finally {
       setBusy(false);
     }
@@ -169,6 +178,18 @@ export function CampaignAppearance({ campaign, images, onSaved }) {
       <form className="form campaign-settings-form" onSubmit={submit}>
         <label>{t("common.name")}
           <input value={draft.name} required maxLength={100} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </label>
+        <div>
+          <label>{t("campaigns.slug")}
+            <input value={draft.slug} required maxLength={64} pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              autoCapitalize="none" spellCheck={false} aria-describedby="campaign-link-help"
+              onChange={(event) => setDraft({ ...draft, slug: event.target.value })} />
+          </label>
+          <small id="campaign-link-help">{t("campaigns.slugHelp")}</small>
+        </div>
+        <label>{t("campaigns.registrationLink")}
+          <input type="url" readOnly value={campaignLink(campaign.slug, "register").href}
+            onFocus={(event) => event.currentTarget.select()} />
         </label>
         <label>{t("common.description")}
           <textarea value={draft.description} maxLength={2000} rows={3}

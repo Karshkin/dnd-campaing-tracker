@@ -4,6 +4,13 @@
     "subtitle": "Tomo de Aventuras"
   },
   "campaigns": {
+    "slug": "Identificador del enlace",
+    "slugHelp": "Usa letras minúsculas, números y guiones. Si lo cambias, comparte el nuevo enlace de registro.",
+    "registrationLink": "Enlace de registro",
+    "slugTaken": "Ese identificador ya está en uso.",
+    "registerFor": "Te estás registrando en {{name}}.",
+    "invalidRegistration": "El enlace de registro ya no está activo. Pide uno nuevo a la administración de la campaña.",
+    "superadmin": "Superadministración",
     "title": "Campañas",
     "label": "Campaña",
     "create": "Crear campaña",
@@ -23,7 +30,7 @@
     "invite": "Añadir a la campaña",
     "inviteError": "No se pudo añadir el miembro.",
     "membership": "Membresía",
-    "director": "Dirección de campaña",
+    "director": "Administrador de campaña",
     "removeMember": "Quitar de la campaña",
     "removeConfirm": "¿Quitar a este miembro de la campaña?",
     "removeError": "No se pudo quitar el miembro."

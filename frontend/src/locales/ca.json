@@ -4,6 +4,13 @@
     "subtitle": "Tom d’aventures"
   },
   "campaigns": {
+    "slug": "Identificador de l’enllaç",
+    "slugHelp": "Fes servir lletres minúscules, números i guionets. Si el canvies, comparteix el nou enllaç de registre.",
+    "registrationLink": "Enllaç de registre",
+    "slugTaken": "Aquest identificador ja està en ús.",
+    "registerFor": "T’estàs registrant a {{name}}.",
+    "invalidRegistration": "L’enllaç de registre ja no està actiu. Demana’n un de nou a l’administració de la campanya.",
+    "superadmin": "Superadministració",
     "title": "Campanyes",
     "label": "Campanya",
     "create": "Crea una campanya",
@@ -23,7 +30,7 @@
     "invite": "Afegeix a la campanya",
     "inviteError": "No s’ha pogut afegir el membre.",
     "membership": "Pertinença",
-    "director": "Direcció de campanya",
+    "director": "Administrador de campanya",
     "removeMember": "Treu de la campanya",
     "removeConfirm": "Vols treure aquest membre de la campanya?",
     "removeError": "No s’ha pogut treure el membre."

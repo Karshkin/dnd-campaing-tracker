@@ -21,6 +21,7 @@
   width: min(100%, 23rem);
   min-width: 0;
 }
+.campaign-selector:not(:has(.campaign-create)) { grid-template-columns: minmax(0, 1fr); }
 .campaign-picker, .campaign-settings-form label, .campaign-create label {
   display: grid;
   gap: 0.3rem;
