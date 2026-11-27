@@ -4,7 +4,10 @@ import "./character-sheet.css";
 
 export const defaultCharacterEmoji = "🧙";
 const emojis = ["🧙", "🧝", "🧛", "🧚", "🥷", "🐉", "🐺", "🦊", "🦉", "🐈‍⬛", "🐻", "🦇", "⚔️", "🛡️", "🏹", "🪓", "🪄", "🔮", "📜", "🔥", "🌙", "💀", "🍀", "⚡"];
-const fields = ["background", "equipment", "abilities", "appearance", "personality", "goals"];
+const fields = ["background", "equipment", "abilities", "appearance", "personality", "goals", "notes"];
+const privateOptions = [...fields, "nivel20_url"];
+const fieldLabel = (field) => field === "notes" ? "common.notes"
+  : field === "nivel20_url" ? "characterSheet.nivel20Label" : `characterSheet.${field}`;
 
 function nivel20Link(raw) {
   const value = raw?.trim();
@@ -18,7 +21,10 @@ function nivel20Link(raw) {
 }
 
 export function sheetDraft(character = {}) {
-  return Object.fromEntries(["emoji", "nivel20_url", ...fields].map((field) => [field, character[field] ?? ""]));
+  return {
+    ...Object.fromEntries(["emoji", ...privateOptions].map((field) => [field, character[field] ?? ""])),
+    private_fields: character.private_fields ?? [],
+  };
 }
 
 export function SheetFields({ draft, onChange }) {
@@ -48,11 +54,24 @@ export function SheetFields({ draft, onChange }) {
       </label>
       {fields.map((field) => (
         <label key={field}>
-          <span id={`${fieldId}-${field}`}>{t(`characterSheet.${field}`)}</span>
+          <span id={`${fieldId}-${field}`}>{t(fieldLabel(field))}</span>
           <textarea aria-labelledby={`${fieldId}-${field}`} rows={3} maxLength={4000} value={draft[field]}
             onChange={(event) => onChange(field, event.target.value)} />
         </label>
       ))}
+      <fieldset className="character-privacy-options">
+        <legend>{t("characterSheet.privateFields")}</legend>
+        <p>{t("characterSheet.privacyHelp")}</p>
+        {privateOptions.map((field) => (
+          <label key={field}>
+            <input type="checkbox" checked={draft.private_fields.includes(field)}
+              onChange={(event) => onChange("private_fields", event.target.checked
+                ? [...draft.private_fields, field]
+                : draft.private_fields.filter((item) => item !== field))} />
+            {t(fieldLabel(field))}
+          </label>
+        ))}
+      </fieldset>
     </div>
   );
 }
@@ -103,7 +122,9 @@ export function CharacterSheet({ character, editable, onSave }) {
         <dl className="character-sheet-facts">
           {populated.map((field) => (
             <div key={field}>
-              <dt>{t(`characterSheet.${field}`)}</dt>
+              <dt>{t(fieldLabel(field))}
+                {character.private_fields?.includes(field) && <small> · {t("characterSheet.privateTag")}</small>}
+              </dt>
               <dd>{character[field]}</dd>
             </div>
           ))}

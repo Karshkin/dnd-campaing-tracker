@@ -108,6 +108,9 @@
     "image": "Imatge de la fitxa {{number}}"
   },
   "characterSheet": {
+    "privateFields": "Camps privats",
+    "privacyHelp": "Els detalls es comparteixen per defecte amb la campanya. Marca els camps que només tu pots consultar. Si deixes l’enllaç de Nivel20 sense marcar, els administradors també el poden veure.",
+    "privateTag": "Privat",
     "nivel20Label": "Enllaç a Nivel20 (opcional)",
     "nivel20Help": "Enganxa l’enllaç HTTPS del teu personatge des del botó Comparteix de Nivel20.",
     "nivel20Invalid": "Introdueix l’enllaç HTTPS d’una fitxa a nivel20.com.",

@@ -226,7 +226,7 @@ async function dispatch(path, method, body) {
   const location = new URL(path, "https://campaign.invalid");
   const [collection, id, action, key] = location.pathname.slice(1).split("/");
   if (collection === "character-companions" && method === "GET") {
-    return listRows(supabase.rpc("list_character_companions"), "name", true);
+    return listRows(supabase.rpc("list_shared_character_sheets"), "name", true);
   }
   if (action === "gallery" && Object.hasOwn(galleryConfigs, collection)) {
     return entryGallery(galleryConfigs[collection], id, key, method, body);
@@ -254,7 +254,7 @@ async function dispatch(path, method, body) {
 
   if (method === "GET") {
     const query = collection === "characters" && !nested
-      ? source.select("*,owner:profiles(username)")
+      ? source.select("*,owner:profiles(username),private:character_private_fields(fields)")
       : source.select();
     if (nested) query.eq(parent, id);
     if (collection === "maps" && !nested) query.eq("is_active", true);
@@ -262,11 +262,21 @@ async function dispatch(path, method, body) {
     if (collection === "characters" && !nested) {
       const { session } = await value(supabase.auth.getSession());
       const ownId = session?.user.id;
-      return listRows(query, order, ascending, (row) => row.user_id === ownId
-        ? row
-        : { ...row, sheet_file_path: null });
+      return listRows(query, order, ascending, ({ private: privateRow, ...row }) => {
+        const ownFields = privateRow?.fields ?? {};
+        return row.user_id === ownId
+          ? { ...row, ...ownFields, private_fields: Object.keys(ownFields) }
+          : { ...row, sheet_file_path: null };
+      });
     }
     return listRows(query, order, ascending);
+  }
+
+  if (collection === "characters" && !action && ["POST", "PUT"].includes(method)
+      && Array.isArray(body?.private_fields)) {
+    return value(supabase.rpc("save_character_profile", {
+      target_id: id ? Number(id) : null, draft: body,
+    }).single());
   }
 
   if (method === "DELETE" && action === "image") {
