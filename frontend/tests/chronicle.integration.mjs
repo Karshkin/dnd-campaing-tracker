@@ -74,6 +74,7 @@ try {
   const group = ok(await member.rpc("create_inventory_group", { group_name: "Exploradores" }));
   const foreignGroup = ok(await other.rpc("create_inventory_group", { group_name: "Exploradores" }));
   const faction = await insert(director, "organizations", { name: "Círculo del faro" });
+  const secondFaction = await insert(director, "organizations", { name: "Orden de la costa" });
   const character = await insert(member, "characters", { name: "Niebla" });
   const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
@@ -99,7 +100,7 @@ try {
   assert.equal(ok(await director.from("chronicle_notes").select().single()).notes, sessionDraft.notes);
 
   const reputation = { organization_id: faction.id, group_id: group };
-  const score = async (client = member) => ok(await client.from("faction_reputation").select().eq("group_id", group));
+  const score = async (client = member) => ok(await client.from("faction_reputation").select().eq("group_id", group).eq("organization_id", faction.id));
   assert.equal((await score())[0].score, 0);
   assert.deepEqual(await score(onlooker), []);
   assert.deepEqual(await score(outside), []);
@@ -179,8 +180,18 @@ try {
   base.searchParams.set("campaign", slug);
   async function openAs(actor) {
     const loginUrl = new URL(base);
-    loginUrl.hash = "/login";
+    loginUrl.hash = "/chronicle";
+    const anonymousRequests = [];
+    const track = (request) => {
+      if (request.url().includes("/rest/v1/")) anonymousRequests.push(new URL(request.url()).pathname);
+    };
+    page.on("request", track);
     await page.goto(loginUrl.href);
+    await page.getByRole("heading", { name: "Iniciar sesión" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Crónica de aventuras" }).count(), 0);
+    assert.equal(await page.getByText(slug, { exact: true }).count(), 0);
+    assert.deepEqual(anonymousRequests, []);
+    page.off("request", track);
     await page.getByPlaceholder("Correo", { exact: false }).fill(actor.email);
     await page.locator('input[type="password"]').fill(password);
     await page.locator('button[type="submit"]').click();
@@ -207,6 +218,7 @@ try {
     const cover = document.querySelector(".chronicle-cover img");
     return cover?.complete && cover.naturalWidth > 0;
   });
+  await chronicle.getByRole("button", { name: "Sesiones", exact: true }).click();
   await page.getByRole("button", { name: "Nueva sesión", exact: true }).click();
   await page.getByLabel("Título", { exact: true }).fill("Epílogo");
   await page.getByLabel("Fecha", { exact: true }).fill("2026-11-27");
@@ -226,6 +238,14 @@ try {
   await page.getByLabel("Motivo", { exact: true }).fill("Ayuda en la costa");
   await page.getByRole("button", { name: "+5", exact: true }).click();
   await page.waitForFunction(() => document.querySelector("meter")?.value === -90);
+  const orgPanel = page.locator('[id^="organization_id-"]');
+  for (const name of [secondFaction.name, faction.name, secondFaction.name]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await orgPanel.getByRole("heading", { name, exact: true }).waitFor();
+    assert.equal(await orgPanel.count(), 1);
+    assert.equal(await orgPanel.getByRole("button", { name: "Editar ficha", exact: true }).count(), 1);
+    assert.equal(await orgPanel.getByRole("button", { name: "Galería", exact: true }).count(), 1);
+  }
 
   await browser.close();
   browser = await chromium.launch({ executablePath: process.env.TRACKER_TEST_CHROMIUM || undefined });
@@ -236,11 +256,17 @@ try {
   await playerPage.getByPlaceholder("Correo", { exact: false }).fill(player.email);
   await playerPage.locator('input[type="password"]').fill(password);
   await playerPage.locator('button[type="submit"]').click();
+  await playerPage.getByRole("heading", { name: "Localizaciones y mapas", exact: true }).waitFor();
+  await playerPage.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   await playerPage.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
-  await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
   assert.equal(await playerPage.getByText("Solo DM", { exact: true }).count(), 0);
   assert.equal(await playerPage.getByRole("button", { name: "Nueva sesión", exact: true }).count(), 0);
+  await playerPage.locator(".chronicle").getByRole("button", { name: "Galería", exact: true }).click();
+  await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
+  await playerPage.setViewportSize({ width: 390, height: 844 });
+  await playerPage.getByRole("button", { name: "Inventario grupal", exact: true }).click();
   await playerPage.getByRole("heading", { name: "Monedero", exact: true }).waitFor();
+  assert.equal(await playerPage.getByRole("heading", { name: "Crónica de aventuras" }).count(), 0);
   const inventory = playerPage.locator(".group-inventory");
   assert.match(await inventory.locator(".treasury-wallet").textContent(), /Oro4/);
   await inventory.getByText("Ingresos, transferencias y reparto", { exact: true }).click();
