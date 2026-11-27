@@ -1734,12 +1734,6 @@ function Campaign({ session }) {
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, race: e.target.value }))}
                     placeholder={t('characters.race')}
                   />
-                  <textarea
-                    value={characterDraft.notes}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, notes: e.target.value }))}
-                    placeholder={t('common.notes')}
-                    rows={3}
-                  />
                   <select
                     value={characterDraft.organization_id ?? ""}
                     onChange={(e) => setCharacterDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
@@ -1822,6 +1816,10 @@ function Campaign({ session }) {
                               <strong>{companion.name}</strong>
                               <span>{[companion.race, companion.character_class, `${t("characters.lvl")} ${companion.level}`].filter(Boolean).join(" · ")}</span>
                               <small>{t("characters.owner", { name: companion.owner_name })}</small>
+                              <details className="companion-sheet-details">
+                                <summary>{t("characterSheet.title")}</summary>
+                                <CharacterSheet character={companion} editable={false} />
+                              </details>
                             </div>
                           </li>
                         ))}
@@ -1882,7 +1880,6 @@ function Campaign({ session }) {
                         🏰 {organizations.find((o) => o.id === selectedCharacter.organization_id).name}
                       </span>
                     )}
-                    {selectedCharacter.notes && <p style={{ margin: 0 }}>{selectedCharacter.notes}</p>}
                   </div>
                 </div>
 

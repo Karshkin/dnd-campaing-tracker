@@ -108,6 +108,9 @@
     "image": "Entry image {{number}}"
   },
   "characterSheet": {
+    "privateFields": "Private fields",
+    "privacyHelp": "Sheet details are shared with the campaign by default. Mark fields that only you can view. If the Nivel20 link is unchecked, administrators can also view it.",
+    "privateTag": "Private",
     "nivel20Label": "Nivel20 link (optional)",
     "nivel20Help": "Paste your character’s HTTPS link from Share in Nivel20.",
     "nivel20Invalid": "Enter an HTTPS character sheet link on nivel20.com.",

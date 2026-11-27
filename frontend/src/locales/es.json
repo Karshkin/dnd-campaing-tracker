@@ -108,6 +108,9 @@
     "image": "Imagen de la ficha {{number}}"
   },
   "characterSheet": {
+    "privateFields": "Campos privados",
+    "privacyHelp": "Los detalles se comparten por defecto con la campaña. Marca los campos que solo tú puedes consultar. El enlace de Nivel20, si lo dejas sin marcar, también lo pueden ver los administradores.",
+    "privateTag": "Privado",
     "nivel20Label": "Enlace a Nivel20 (opcional)",
     "nivel20Help": "Pega el enlace HTTPS de tu personaje, desde Compartir en Nivel20.",
     "nivel20Invalid": "Introduce un enlace HTTPS de una ficha en nivel20.com.",

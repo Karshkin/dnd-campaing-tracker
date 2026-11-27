@@ -109,6 +109,21 @@ try {
   assert.equal(companion.owner_name, `Player ${run}`);
   assert.equal(companion.equipment, undefined);
   assert.ok((await outsider.rpc("list_character_companions")).error);
+  const privacyDraft = { emoji: "🐉", equipment: "Longbow", background: "Secret origin", private_fields: ["background"] };
+  await request(api, profilePath, "PUT", privacyDraft);
+  const ownPrivate = (await request(api, "/characters")).find((row) => row.id === character.id);
+  assert.equal(ownPrivate.background, "Secret origin");
+  assert.deepEqual(ownPrivate.private_fields, ["background"]);
+  const shared = ok(await second.rpc("list_shared_character_sheets")
+    .eq("id", character.id).single());
+  assert.equal(shared.background, "");
+  assert.equal(shared.equipment, "Longbow");
+  assert.deepEqual(ok(await dmClient.from("character_private_fields").select().eq("character_id", character.id)), []);
+  assert.equal(ok(await dmClient.from("characters").select("background")
+    .eq("id", character.id).single()).background, "");
+  await request(api, profilePath, "PUT", { ...privacyDraft, private_fields: [] });
+  assert.equal(ok(await second.rpc("list_shared_character_sheets")
+    .eq("id", character.id).single()).background, "Secret origin");
 
   const galleryPath = `${profilePath}/gallery`;
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==", "base64");
