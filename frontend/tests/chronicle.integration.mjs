@@ -224,8 +224,27 @@ try {
   await page.getByLabel("Fecha", { exact: true }).fill("2026-11-27");
   await page.getByRole("textbox", { name: "Resumen", exact: true }).fill("Al alba");
   await page.getByLabel("Notas privadas del director", { exact: true }).fill("Solo DM");
+  const attendancePicker = page.getByRole("group", { name: "Asistencia" });
+  await attendancePicker.getByRole("button", { name: "Seleccionar toda la asistencia" }).click();
+  const organizationPicker = page.getByRole("group", { name: "Organizaciones", exact: true });
+  await organizationPicker.getByRole("checkbox", { name: faction.name }).check();
+  await organizationPicker.getByRole("searchbox").fill(secondFaction.name);
+  await organizationPicker.getByRole("checkbox", { name: secondFaction.name }).focus();
+  await page.keyboard.press("Space");
+  assert.equal(await organizationPicker.getByText("2 seleccionados", { exact: true }).count(), 1);
   await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
   await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Editar sesión" }).click();
+  assert.equal(await attendancePicker.getByRole("checkbox", { checked: true }).count(), 2);
+  assert.equal(await organizationPicker.getByRole("checkbox", { checked: true }).count(), 2);
+  await organizationPicker.getByRole("button", { name: `Quitar ${secondFaction.name}` }).click();
+  await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
+  await page.getByRole("button", { name: "Editar sesión" }).waitFor();
+  const epilogue = ok(await director.from("chronicle_sessions").select("id").eq("title", "Epílogo").single());
+  assert.deepEqual(ok(await director.from("chronicle_links").select("organization_id").eq("session_id", epilogue.id)),
+    [{ organization_id: faction.id }]);
   await page.getByRole("button", { name: "Publicar resumen", exact: true }).click();
   await page.getByText("Al alba", { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector(".chronicle .chronicle-panel time")?.parentElement.textContent.includes("Publicada"));
