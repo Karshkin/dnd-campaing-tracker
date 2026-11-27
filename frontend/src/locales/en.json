@@ -98,6 +98,10 @@
     "createError": "Could not create diary entry."
   },
   "characterSheet": {
+    "nivel20Label": "Nivel20 link (optional)",
+    "nivel20Help": "Paste your character’s HTTPS link from Share in Nivel20.",
+    "nivel20Invalid": "Enter an HTTPS character sheet link on nivel20.com.",
+    "openNivel20": "Open sheet in Nivel20",
     "noDiaryEntries": "This character has no diary entries yet.",
     "retryDiary": "Reload diary",
     "companions": "Campaign companions",

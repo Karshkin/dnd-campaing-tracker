@@ -98,6 +98,10 @@
     "createError": "No se pudo crear la entrada del diario."
   },
   "characterSheet": {
+    "nivel20Label": "Enlace a Nivel20 (opcional)",
+    "nivel20Help": "Pega el enlace HTTPS de tu personaje, desde Compartir en Nivel20.",
+    "nivel20Invalid": "Introduce un enlace HTTPS de una ficha en nivel20.com.",
+    "openNivel20": "Abrir ficha en Nivel20",
     "noDiaryEntries": "Este personaje aún no tiene entradas en el diario.",
     "retryDiary": "Volver a cargar el diario",
     "companions": "Compañeros de campaña",

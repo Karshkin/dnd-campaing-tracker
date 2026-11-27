@@ -6,8 +6,19 @@ export const defaultCharacterEmoji = "🧙";
 const emojis = ["🧙", "🧝", "🧛", "🧚", "🥷", "🐉", "🐺", "🦊", "🦉", "🐈‍⬛", "🐻", "🦇", "⚔️", "🛡️", "🏹", "🪓", "🪄", "🔮", "📜", "🔥", "🌙", "💀", "🍀", "⚡"];
 const fields = ["background", "equipment", "abilities", "appearance", "personality", "goals"];
 
+function nivel20Link(raw) {
+  const value = raw?.trim();
+  if (!value || !/^https:\/\/(www\.)?nivel20\.com\/[A-Za-z0-9]\S*$/.test(value)) return "";
+  try {
+    const url = new URL(value);
+    return url.pathname !== "/" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 export function sheetDraft(character = {}) {
-  return Object.fromEntries(["emoji", ...fields].map((field) => [field, character[field] ?? ""]));
+  return Object.fromEntries(["emoji", "nivel20_url", ...fields].map((field) => [field, character[field] ?? ""]));
 }
 
 export function SheetFields({ draft, onChange }) {
@@ -21,6 +32,19 @@ export function SheetFields({ draft, onChange }) {
           <option value="">{defaultCharacterEmoji} {t("characterSheet.defaultEmoji")}</option>
           {emojis.map((emoji) => <option key={emoji} value={emoji}>{emoji}</option>)}
         </select>
+      </label>
+      <label className="character-nivel20-field">
+        <span>{t("characterSheet.nivel20Label")}</span>
+        <input type="url" inputMode="url" maxLength={2048} value={draft.nivel20_url}
+          pattern={String.raw`https://(www\.)?nivel20\.com/[A-Za-z0-9]\S*`}
+          placeholder="https://nivel20.com/…"
+          onChange={(event) => {
+            event.target.setCustomValidity("");
+            onChange("nivel20_url", event.target.value.trim());
+          }}
+          onInvalid={(event) => event.target.setCustomValidity(t("characterSheet.nivel20Invalid"))}
+        />
+        <small>{t("characterSheet.nivel20Help")}</small>
       </label>
       {fields.map((field) => (
         <label key={field}>
@@ -37,6 +61,7 @@ export function CharacterSheet({ character, editable, onSave }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
+  const externalSheet = nivel20Link(character.nivel20_url);
   const populated = fields.filter((field) => character[field]?.trim());
 
   async function save(event) {
@@ -53,11 +78,18 @@ export function CharacterSheet({ character, editable, onSave }) {
     <section className="character-sheet-panel">
       <div className="character-section-heading">
         <h4>{t("characterSheet.title")}</h4>
-        {editable && !draft && (
-          <button type="button" onClick={() => setDraft(sheetDraft(character))}>
-            {t("characterSheet.edit")}
-          </button>
-        )}
+        <div className="character-sheet-actions">
+          {!draft && externalSheet && (
+            <a className="character-nivel20-link" href={externalSheet} target="_blank" rel="noopener noreferrer">
+              {t("characterSheet.openNivel20")} <span aria-hidden="true">↗</span>
+            </a>
+          )}
+          {editable && !draft && (
+            <button type="button" onClick={() => setDraft(sheetDraft(character))}>
+              {t("characterSheet.edit")}
+            </button>
+          )}
+        </div>
       </div>
       {editable && draft ? (
         <form className="form" onSubmit={save}>
@@ -76,7 +108,7 @@ export function CharacterSheet({ character, editable, onSave }) {
             </div>
           ))}
         </dl>
-      ) : <p className="character-sheet-empty">{t("characterSheet.empty")}</p>}
+      ) : !externalSheet ? <p className="character-sheet-empty">{t("characterSheet.empty")}</p> : null}
     </section>
   );
 }
