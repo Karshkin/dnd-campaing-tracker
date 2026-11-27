@@ -113,12 +113,11 @@ export function CharacterSheet({ character, editable, onSave }) {
   );
 }
 
-export function CharacterGallery({ editable, api, characterId, onView }) {
+export function ImageGallery({ editable, api, path, onView, imageLabel = "characterSheet.image" }) {
   const { t } = useTranslation();
   const [images, setImages] = useState([]);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const path = `/characters/${characterId}/gallery`;
 
   useEffect(() => {
     let active = true;
@@ -139,7 +138,7 @@ export function CharacterGallery({ editable, api, characterId, onView }) {
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [characterId, revision]);
+  }, [path, revision]);
 
   async function add(event) {
     const files = Array.from(event.currentTarget.files);
@@ -185,7 +184,7 @@ export function CharacterGallery({ editable, api, characterId, onView }) {
             <li key={id}>
               {url && (
                 <button type="button" className="character-gallery-image" onClick={() => onView(url)}>
-                  <img src={url} alt={t("characterSheet.image", { number: index + 1 })} loading="lazy" />
+                  <img src={url} alt={t(imageLabel, { number: index + 1 })} loading="lazy" />
                 </button>
               )}
               {editable && <button type="button" disabled={busy} onClick={() => remove(id)}>{t("common.delete")}</button>}

@@ -98,6 +98,15 @@
     "add": "Afegeix una entrada",
     "createError": "No s’ha pogut crear l’entrada del diari."
   },
+  "entryEditor": {
+    "alignment": "Actitud",
+    "organization": "Organització",
+    "currentOrganization": "Organització actual",
+    "cover": "Imatge principal",
+    "removeCover": "Treu la imatge principal",
+    "confirmRemoveCover": "Vols treure la imatge principal?",
+    "image": "Imatge de la fitxa {{number}}"
+  },
   "characterSheet": {
     "nivel20Label": "Enllaç a Nivel20 (opcional)",
     "nivel20Help": "Enganxa l’enllaç HTTPS del teu personatge des del botó Comparteix de Nivel20.",

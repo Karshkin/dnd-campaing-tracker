@@ -98,6 +98,15 @@
     "add": "Añadir Entrada",
     "createError": "No se pudo crear la entrada del diario."
   },
+  "entryEditor": {
+    "alignment": "Actitud",
+    "organization": "Organización",
+    "currentOrganization": "Organización actual",
+    "cover": "Imagen principal",
+    "removeCover": "Quitar imagen principal",
+    "confirmRemoveCover": "¿Quitar la imagen principal?",
+    "image": "Imagen de la ficha {{number}}"
+  },
   "characterSheet": {
     "nivel20Label": "Enlace a Nivel20 (opcional)",
     "nivel20Help": "Pega el enlace HTTPS de tu personaje, desde Compartir en Nivel20.",
