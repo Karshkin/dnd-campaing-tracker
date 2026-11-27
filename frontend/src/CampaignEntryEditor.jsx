@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ImageGallery } from "./CharacterSheet";
+import { ImageGallery, PrivateFields } from "./CharacterSheet";
 
 const fields = {
   creatures: [
@@ -30,6 +30,15 @@ const fields = {
     ["description", "common.description", "textarea"],
   ],
 };
+
+export function EntryPrivacy({ collection, draft, setDraft }) {
+  const options = fields[collection].filter(([key]) => !["name", "alignment", "organization_id"].includes(key));
+  return (
+    <PrivateFields options={options} selected={draft.private_fields ?? []}
+      onChange={(privateFields) => setDraft((current) => ({ ...current, private_fields: privateFields }))}
+      help="entryEditor.privacyHelp" />
+  );
+}
 
 export function CampaignEntryTools({ collection, entry, editable, organizations = [], api, refresh, onView }) {
   const { t } = useTranslation();
@@ -116,7 +125,10 @@ export function CampaignEntryTools({ collection, entry, editable, organizations 
     <div className="campaign-entry-tools">
       <div className="character-sheet-actions">
         {editable && !draft && (
-          <button type="button" onClick={() => setDraft(Object.fromEntries(inputs.map(([key]) => [key, entry[key]])))}>
+          <button type="button" onClick={() => setDraft({
+            ...Object.fromEntries(inputs.map(([key]) => [key, entry[key]])),
+            private_fields: entry.private_fields ?? [],
+          })}>
             {t("characterSheet.edit")}
           </button>
         )}
@@ -135,6 +147,7 @@ export function CampaignEntryTools({ collection, entry, editable, organizations 
                 </label>
               ))}
             </div>
+            <EntryPrivacy collection={collection} draft={draft} setDraft={setDraft} />
             <div className="character-sheet-actions">
               <button type="submit" disabled={saving || !draft.name.trim()}>{t("common.save")}</button>
               <button type="button" disabled={saving} onClick={() => setDraft(null)}>{t("common.cancel")}</button>
@@ -154,6 +167,12 @@ export function CampaignEntryTools({ collection, entry, editable, organizations 
             )}
           </div>
         </div>
+      )}
+      {!draft && entry.private_fields?.length > 0 && (
+        <p className="entry-private-indicator">
+          {t("entryEditor.privateSummary", { fields: inputs.filter(([key]) => entry.private_fields.includes(key))
+            .map(([,label]) => t(label).replace(/:$/, "")).join(", ") })}
+        </p>
       )}
       {showGallery && (
         <ImageGallery editable={editable} api={api} path={`${path}/gallery`} onView={onView}

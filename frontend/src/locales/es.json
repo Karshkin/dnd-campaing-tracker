@@ -99,6 +99,8 @@
     "createError": "No se pudo crear la entrada del diario."
   },
   "entryEditor": {
+    "privacyHelp": "Los campos están visibles por defecto para quienes pueden ver esta sección. Los que marques solo estarán disponibles para quienes pueden editarla.",
+    "privateSummary": "Campos privados: {{fields}}",
     "alignment": "Actitud",
     "organization": "Organización",
     "currentOrganization": "Organización actual",

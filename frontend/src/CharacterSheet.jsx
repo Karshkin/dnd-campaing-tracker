@@ -59,20 +59,29 @@ export function SheetFields({ draft, onChange }) {
             onChange={(event) => onChange(field, event.target.value)} />
         </label>
       ))}
-      <fieldset className="character-privacy-options">
-        <legend>{t("characterSheet.privateFields")}</legend>
-        <p>{t("characterSheet.privacyHelp")}</p>
-        {privateOptions.map((field) => (
-          <label key={field}>
-            <input type="checkbox" checked={draft.private_fields.includes(field)}
-              onChange={(event) => onChange("private_fields", event.target.checked
-                ? [...draft.private_fields, field]
-                : draft.private_fields.filter((item) => item !== field))} />
-            {t(fieldLabel(field))}
-          </label>
-        ))}
-      </fieldset>
+      <PrivateFields options={privateOptions.map((field) => [field, fieldLabel(field)])}
+        selected={draft.private_fields} onChange={(next) => onChange("private_fields", next)}
+        help="characterSheet.privacyHelp" />
     </div>
+  );
+}
+
+export function PrivateFields({ options, selected, onChange, help }) {
+  const { t } = useTranslation();
+  return (
+    <fieldset className="character-privacy-options">
+      <legend>{t("characterSheet.privateFields")}</legend>
+      <p>{t(help)}</p>
+      {options.map(([field, label]) => (
+        <label key={field}>
+          <input type="checkbox" checked={selected.includes(field)}
+            onChange={(event) => onChange(event.target.checked
+              ? [...selected, field]
+              : selected.filter((item) => item !== field))} />
+          {t(label).replace(/:$/, "")}
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
