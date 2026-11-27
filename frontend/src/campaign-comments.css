@@ -1,0 +1,10 @@
+.campaign-comments { margin-block: 0.75rem; padding: 0.7rem; background: #fffaf1; border: 1px solid #ddc8aa; border-radius: 8px; min-width: 0; }
+.campaign-comments summary { cursor: pointer; color: var(--sienna-dark); font-weight: 700; }
+.campaign-comment-thread { margin-top: 0.65rem; min-width: 0; }
+.campaign-comment-thread .form label { display: grid; gap: 0.25rem; }
+.campaign-comment-thread .form p { margin: 0; }
+.campaign-comment-thread textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.campaign-comment-list { margin-bottom: 0; }
+.campaign-comment-byline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
+.campaign-comment-byline time { font-size: 0.82rem; color: var(--sienna-dark); }
+.campaign-comment-list p { margin: 0.25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,0 +1,21 @@
+.group-inventory h3 { margin-top: 0; }
+.group-create, .group-inventory-actions { margin-bottom: 0.75rem; }
+.group-create summary, .group-my-contributions summary { cursor: pointer; font-weight: 600; }
+.group-create form { margin-top: 0.7rem; }
+.group-inventory-actions, .group-my-contributions form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+.group-inventory label { display: grid; gap: 0.25rem; min-width: 0; }
+.group-inventory input, .group-inventory select { max-width: 100%; min-width: 0; }
+.group-contribution-form { margin-block: 0.75rem; }
+.group-inventory-tables { display: grid; gap: 0.85rem; }
+.group-inventory table { width: 100%; margin: 0; table-layout: fixed; }
+.group-inventory caption { color: var(--sienna-dark); font-weight: 700; text-align: left; margin-bottom: 0.3rem; }
+.group-inventory th, .group-inventory td { overflow-wrap: anywhere; }
+.group-inventory td:last-child, .group-inventory th:last-child { width: 35%; text-align: right; }
+.group-my-contributions { margin-top: 0.9rem; }
+.group-my-contributions li { display: grid; gap: 0.35rem; }
+.group-my-contributions .group-inventory-actions { margin: 0; }

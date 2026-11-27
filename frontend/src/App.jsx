@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 
 import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
+import { CampaignComments } from "./CampaignComments";
+import { GroupInventory } from "./GroupInventory";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
@@ -359,6 +361,7 @@ function Campaign({ session }) {
 
   // User-specific data
   const [characters, refreshCharacters] = useCampaignData("/characters", hasPagePermission("characters"), setOperationError);
+  const commentAuthors = characters.filter((character) => character.user_id === userId);
   const [companions] = useCampaignData("/character-companions",
     hasPagePermission("characters") && !currentUser?.is_admin, setOperationError);
   const [selectedCharacterRecord, setSelectedCharacter] = useState(null);
@@ -1414,6 +1417,7 @@ function Campaign({ session }) {
                   </form>
                 )}
 
+                {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>
                     <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
@@ -1488,6 +1492,7 @@ function Campaign({ session }) {
 
           <article className="card">
             <h2>{t('resources.title')}</h2>
+            {isAuthenticated && hasPagePermission("tracker") && <GroupInventory userId={userId} />}
             {hasPagePermission("tracker", "edit") && (
               <form onSubmit={submitResource} className="form" style={{ marginBottom: "1rem" }}>
                 <input
@@ -1739,6 +1744,7 @@ function Campaign({ session }) {
                               <details className="companion-sheet-details">
                                 <summary>{t("characterSheet.title")}</summary>
                                 <CharacterSheet character={companion} editable={false} />
+                                <CampaignComments collection="characters" entryId={companion.id} authors={commentAuthors} />
                               </details>
                             </div>
                           </li>
@@ -1805,6 +1811,9 @@ function Campaign({ session }) {
 
                 <CharacterSheet key={selectedCharacter.id} character={selectedCharacter} editable={canEditSelectedCharacter}
                   onSave={(draft) => saveCharacterSheet(selectedCharacter.id, draft)} />
+
+                <CampaignComments key={`comments-${selectedCharacter.id}`} collection="characters"
+                  entryId={selectedCharacter.id} authors={commentAuthors} />
 
                 {(ownsSelectedCharacter || currentUser?.is_admin) && (
                   <ImageGallery key={selectedCharacter.id} path={`/characters/${selectedCharacter.id}/gallery`}
@@ -2040,6 +2049,7 @@ function Campaign({ session }) {
                     <CampaignEntryTools collection="creatures" entry={creature}
                       editable={hasPagePermission("bestiary", "edit")} api={request}
                       refresh={refreshCreatures} onView={setSelectedCreatureImage} />
+                    <CampaignComments collection="creatures" entryId={creature.id} authors={commentAuthors} />
                   </div>
                 </li>
               ))}
@@ -2165,6 +2175,7 @@ function Campaign({ session }) {
                   <CampaignEntryTools key={selectedOrg.id} collection="organizations" entry={selectedOrg}
                     editable={hasPagePermission("organizations", "edit")} api={request}
                     refresh={refreshOrganizations} onView={setSelectedOrgImage} />
+                  <CampaignComments collection="organizations" entryId={selectedOrg.id} authors={commentAuthors} />
                   <h4 style={{ margin: "0 0 0.75rem" }}>{t('organizations.membersSection')}</h4>
                   {allies.filter((a) => a.organization_id === selectedOrg.id).length === 0 ? (
                     <p style={{ margin: 0 }}>{t('organizations.noMembers')}</p>
@@ -2328,6 +2339,7 @@ function Campaign({ session }) {
                       <CampaignEntryTools collection="allies" entry={ally} organizations={organizations}
                         editable={hasPagePermission("npcs", "edit")} api={request}
                         refresh={refreshAllies} onView={setSelectedAllyImage} />
+                      <CampaignComments collection="allies" entryId={ally.id} authors={commentAuthors} />
                     </div>
                   </li>
                 );
