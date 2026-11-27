@@ -15,6 +15,7 @@
     "logout": "🚪 Salir"
   },
   "common": {
+    "loading": "Cargando…",
     "title": "Título",
     "name": "Nombre",
     "description": "Descripción",
@@ -37,6 +38,10 @@
     "clickToViewFull": "Clic para ver a tamaño completo"
   },
   "auth": {
+    "email": "Correo electrónico",
+    "confirmEmail": "Revisa tu bandeja de entrada para confirmar el correo antes de iniciar sesión.",
+    "configurationMissing": "Falta la configuración de Supabase.",
+    "loadingSession": "Restaurando tu sesión…",
     "login": "Iniciar sesión",
     "register": "Registro",
     "username": "Usuario",

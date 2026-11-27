@@ -15,6 +15,7 @@
     "logout": "🚪 Logout"
   },
   "common": {
+    "loading": "Loading…",
     "title": "Title",
     "name": "Name",
     "description": "Description",
@@ -37,6 +38,10 @@
     "clickToViewFull": "Click to view full size"
   },
   "auth": {
+    "email": "Email",
+    "confirmEmail": "Check your inbox to confirm your email before signing in.",
+    "configurationMissing": "Supabase configuration is missing.",
+    "loadingSession": "Restoring your session…",
     "login": "Login",
     "register": "Register",
     "username": "Username",

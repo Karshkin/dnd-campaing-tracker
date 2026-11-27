@@ -2,85 +2,41 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
 const PERMISSION_RANK = { none: 0, view: 1, edit: 2, admin: 3 };
 
-// ===== AUTH HELPERS =====
-function getAuthToken() {
-  return localStorage.getItem("authToken");
-}
+const emptyCollection = [];
 
-function setAuthToken(token) {
-  localStorage.setItem("authToken", token);
-}
-
-function clearAuthToken() {
-  localStorage.removeItem("authToken");
-  localStorage.removeItem("isAdmin");
-}
-
-function getIsAdmin() {
-  return localStorage.getItem("isAdmin") === "true";
-}
-
-function setIsAdmin(isAdmin) {
-  localStorage.setItem("isAdmin", isAdmin ? "true" : "false");
-}
-
-// ===== HOOKS =====
-function useApiData(path, defaultValue) {
-  const [data, setData] = useState(defaultValue);
-
+function useCampaignData(path, enabled, onError) {
+  const [data, setData] = useState(emptyCollection);
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_URL}${path}`);
-      if (!response.ok) {
-        return;
-      }
-      const payload = await response.json();
-      setData(payload);
-    } catch (error) {
-      console.error(error);
-    }
-  }, [path]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return [data, refresh];
-}
-
-function useAuthenticatedApiData(path, defaultValue, isAuthenticated) {
-  const [data, setData] = useState(defaultValue);
-
-  const refresh = useCallback(async () => {
-    if (!isAuthenticated) {
-      setData(defaultValue);
+    const request = ++latest.current;
+    if (!enabled) {
+      setData(emptyCollection);
       return;
     }
-    try {
-      const token = getAuthToken();
-      const response = await fetch(`${API_URL}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        return;
-      }
-      const payload = await response.json();
-      setData(payload);
-    } catch (error) {
-      console.error(error);
-    }
-  }, [path, isAuthenticated]);
+    const response = await campaignRequest(path);
+    const payload = await response.json();
+    if (request !== latest.current) return;
+    if (response.ok) setData(payload);
+    else onError(payload.detail);
+  }, [path, enabled, onError]);
 
   useEffect(() => {
     refresh();
+    window.addEventListener("focus", refresh);
+    const timer = setInterval(refresh, 12 * 60 * 1000);
+    return () => {
+      ++latest.current;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, [refresh]);
 
-  return [data, refresh];
+  return [enabled ? data : emptyCollection, refresh];
 }
 
 function hasLevel(actual, required) {
@@ -250,7 +206,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tem
           {activePopup.event.description && <p>{activePopup.event.description}</p>}
           {activePopup.event.image_path && (
             <img
-              src={`${API_URL}/${activePopup.event.image_path}`}
+              src={activePopup.event.image_path}
               alt={activePopup.event.title}
               className="marker-popup-image"
             />
@@ -266,59 +222,104 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tem
 }
 
 // ===== MAIN APP =====
-function App() {
-  // History API routing — map pathname to view name
-  const parsePath = () => {
-    const p = window.location.pathname.replace(/^\//, "") || "tracker";
-    return p === "" ? "tracker" : p;
-  };
+const views = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const parseView = () => {
+  const view = window.location.hash.replace(/^#\/?/, "");
+  return views.includes(view) ? view : "tracker";
+};
 
-  const [activeView, setActiveView] = useState(parsePath);
+function App() {
   const { t } = useTranslation();
-  const [lang, setLang] = useState(i18n.language);
+  const [session, setSession] = useState(undefined);
 
   useEffect(() => {
-    const handlePop = () => setActiveView(parsePath());
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!supabase) return <main><p className="error">{t("auth.configurationMissing")}</p></main>;
+  if (session === undefined) return <main><p role="status">{t("auth.loadingSession")}</p></main>;
+  return <Campaign key={session?.user.id ?? "guest"} session={session} />;
+}
+
+function Campaign({ session }) {
+  const [activeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
+    ? "tracker"
+    : parseView());
+  const { t } = useTranslation();
+  const [lang, setLang] = useState(i18n.language);
+  const [operationError, setOperationError] = useState("");
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => {
+    const handlePop = () => setActiveView(parseView());
+    window.addEventListener("hashchange", handlePop);
+    return () => window.removeEventListener("hashchange", handlePop);
   }, []);
 
   const navigate = (view) => {
-    const path = view === "tracker" ? "/" : `/${view}`;
-    history.pushState({}, "", path);
+    window.location.hash = view === "tracker" ? "" : `/${view}`;
     setActiveView(view);
   };
 
-  // Auth state
-  const [isAuthenticated, setIsAuthenticated] = useState(!!getAuthToken());
-  const [isAdmin, setIsAdminState] = useState(getIsAdmin());
+  const request = async (path, options) => {
+    const mutation = options?.method && options.method !== "GET";
+    if (mutation) {
+      setOperationError("");
+      setPending((count) => count + 1);
+    }
+    try {
+      const response = await campaignRequest(path, options);
+      if (!response.ok) setOperationError((await response.json()).detail);
+      return response;
+    } finally {
+      if (mutation) setPending((count) => count - 1);
+    }
+  };
+
+  const isAuthenticated = Boolean(session);
+  const userId = session?.user.id;
   const [currentUser, setCurrentUser] = useState(null);
   const [pagePermissions, setPagePermissions] = useState({});
-  const [loginData, setLoginData] = useState({ username: "", password: "" });
-  const [registerData, setRegisterData] = useState({ username: "", password: "", confirmPassword: "" });
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [registerData, setRegisterData] = useState({ username: "", email: "", password: "", confirmPassword: "" });
   const [loginError, setLoginError] = useState("");
   const [registerError, setRegisterError] = useState("");
+  const [registerNotice, setRegisterNotice] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const hasPagePermission = (pageKey, requiredLevel = "view") =>
+    hasLevel(pagePermissions[pageKey], requiredLevel);
+  const canManageAdmin = hasPagePermission("admin", "admin");
 
   // Campaign/Public data
-  const [events, refreshEvents] = useAuthenticatedApiData("/events", [], isAuthenticated);
-  const [resources, refreshResources] = useAuthenticatedApiData("/resources", [], isAuthenticated);
-  const [diaryEntries, refreshDiaryEntries] = useAuthenticatedApiData("/diary", [], isAuthenticated);
-  const [creatures, refreshCreatures] = useAuthenticatedApiData("/creatures", [], isAuthenticated);
-  const [allies, refreshAllies] = useAuthenticatedApiData("/allies", [], isAuthenticated);
-  const [maps, refreshMaps] = useAuthenticatedApiData("/maps", [], isAuthenticated);
-  const [organizations, refreshOrganizations] = useAuthenticatedApiData("/organizations", [], isAuthenticated);
+  const [events, refreshEvents] = useCampaignData("/events", hasPagePermission("tracker"), setOperationError);
+  const [resources, refreshResources] = useCampaignData("/resources", hasPagePermission("tracker"), setOperationError);
+  const [diaryEntries, refreshDiaryEntries] = useCampaignData("/diary", hasPagePermission("tracker"), setOperationError);
+  const [creatures, refreshCreatures] = useCampaignData("/creatures", hasPagePermission("bestiary"), setOperationError);
+  const [allies, refreshAllies] = useCampaignData("/allies", hasPagePermission("npcs"), setOperationError);
+  const [maps, refreshMaps] = useCampaignData("/maps", hasPagePermission("tracker") || canManageAdmin, setOperationError);
+  const hasTrackerMap = maps.length > 0;
+  const [organizations, refreshOrganizations] = useCampaignData("/organizations", hasPagePermission("organizations"), setOperationError);
   const [orgDraft, setOrgDraft] = useState({ name: "", description: "" });
   const [orgImageFile, setOrgImageFile] = useState(null);
-  const [selectedOrg, setSelectedOrg] = useState(null);
+  const [selectedOrgRecord, setSelectedOrg] = useState(null);
+  const selectedOrg = organizations.find((row) => row.id === selectedOrgRecord?.id) ?? null;
   const [selectedOrgImage, setSelectedOrgImage] = useState(null);
   const [orgError, setOrgError] = useState("");
 
   // Map state
-  const [selectedMap, setSelectedMap] = useState(null);       // admin: manage POIs
+  const [selectedMapRecord, setSelectedMap] = useState(null);
+  const selectedMap = maps.find((row) => row.id === selectedMapRecord?.id) ?? null;
   const [selectedMapPOIs, setSelectedMapPOIs] = useState([]); // admin: POIs for selected map
-  const [trackerMap, setTrackerMap] = useState(null);         // tracker view
+  const [trackerMapRecord, setTrackerMap] = useState(null);
+  const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
-  const [adminEventMap, setAdminEventMap] = useState(null);   // admin: map for event management
+  const [adminEventMapRecord, setAdminEventMap] = useState(null);
+  const adminEventMap = maps.find((row) => row.id === adminEventMapRecord?.id) ?? null;
   const [adminMapEvents, setAdminMapEvents] = useState([]);   // admin: events for selected map
 
   // POI draft (pending placement)
@@ -338,13 +339,14 @@ function App() {
 
   // Admin: users list
   const [users, setUsers] = useState([]);
-  const [newUserData, setNewUserData] = useState({ username: "", password: "" });
+  const [newUserData, setNewUserData] = useState({ username: "", email: "", password: "" });
   const [userManagementError, setUserManagementError] = useState("");
   const [passwordResetDrafts, setPasswordResetDrafts] = useState({});
 
   // User-specific data
-  const [characters, refreshCharacters] = useAuthenticatedApiData("/characters", [], isAuthenticated);
-  const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [characters, refreshCharacters] = useCampaignData("/characters", hasPagePermission("characters"), setOperationError);
+  const [selectedCharacterRecord, setSelectedCharacter] = useState(null);
+  const selectedCharacter = characters.find((row) => row.id === selectedCharacterRecord?.id) ?? null;
   const [characterInventory, setCharacterInventory] = useState([]);
   const [characterDiary, setCharacterDiary] = useState([]);
 
@@ -376,13 +378,6 @@ function App() {
   const [creatureError, setCreatureError] = useState("");
   const [allyError, setAllyError] = useState("");
 
-  const hasPagePermission = (pageKey, requiredLevel = "view") => {
-    const actual = pagePermissions[pageKey] ?? "none";
-    return hasLevel(actual, requiredLevel);
-  };
-  const hasTrackerMap = maps.length > 0;
-  const canManageAdmin = hasPagePermission("admin", "admin");
-
   // Helper: read error messages
   const readErrorMessage = async (response, fallbackText) => {
     try {
@@ -393,117 +388,91 @@ function App() {
     }
   };
 
-  // Helper: fetch user info
-  const fetchUserInfo = async (token) => {
-    try {
-      const response = await fetch(`${API_URL}/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const userData = await response.json();
-        const permissionMap = Object.fromEntries(
-          (userData.permissions ?? []).map((item) => [item.page_key, item.permission_level])
-        );
-        setCurrentUser(userData);
-        setPagePermissions(permissionMap);
-        const hasAdminAccess = hasLevel(permissionMap.admin ?? "none", "admin");
-        setIsAdmin(hasAdminAccess);
-        setIsAdminState(hasAdminAccess);
-        return true;
+  // Auth changes remount this component on account changes, clearing private data.
+  useEffect(() => {
+    if (!userId) return;
+    let mounted = true;
+    let version = 0;
+    const refreshProfile = async () => {
+      const requestVersion = ++version;
+      try {
+        const profile = await readProfile(userId);
+        if (!mounted || requestVersion !== version) return;
+        setCurrentUser(profile);
+        setPagePermissions(Object.fromEntries(
+          profile.permissions.map(({ page_key, permission_level }) => [page_key, permission_level]),
+        ));
+      } catch (error) {
+        if (mounted && requestVersion === version) setOperationError(error.message);
       }
-      return false;
-    } catch {
-      return false;
-    }
-  };
+    };
+    refreshProfile();
+    window.addEventListener("focus", refreshProfile);
+    const timer = setInterval(refreshProfile, 60_000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshProfile);
+    };
+  }, [userId]);
 
-  // Auth: Login
   const login = async (event) => {
     event.preventDefault();
     setLoginError("");
-    const formData = new URLSearchParams();
-    formData.append("username", loginData.username);
-    formData.append("password", loginData.password);
-
-    const response = await fetch(`${API_URL}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: formData.toString(),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setAuthToken(data.access_token);
-      const userInfoFetched = await fetchUserInfo(data.access_token);
-      if (userInfoFetched) {
-        setIsAuthenticated(true);
-        setLoginData({ username: "", password: "" });
-        navigate("tracker");
-      } else {
-        setLoginError(t('auth.fetchUserError'));
-        clearAuthToken();
-      }
-      return;
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginData.email.trim(),
+        password: loginData.password,
+      });
+      if (error) setLoginError(error.message);
+      else navigate("tracker");
+    } finally {
+      setAuthBusy(false);
     }
-    setLoginError(await readErrorMessage(response, t('auth.loginFailed')));
   };
 
-  // Auth: Register
   const register = async (event) => {
     event.preventDefault();
     setRegisterError("");
-
     if (registerData.password !== registerData.confirmPassword) {
-      setRegisterError(t('auth.passwordMismatch'));
+      setRegisterError(t("auth.passwordMismatch"));
       return;
     }
-
     if (registerData.password.length < 8) {
-      setRegisterError(t('auth.passwordTooShort'));
+      setRegisterError(t("auth.passwordTooShort"));
       return;
     }
 
-    const response = await fetch(`${API_URL}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: registerData.username, password: registerData.password }),
-    });
-
-    if (response.ok) {
-      setRegisterError("");
-      setRegisterData({ username: "", password: "", confirmPassword: "" });
-      setLoginData({ username: registerData.username, password: "" });
-      navigate("login");
-      return;
-    }
-    setRegisterError(await readErrorMessage(response, t('auth.registrationFailed')));
-  };
-
-  // Auth: Logout
-  const logout = () => {
-    clearAuthToken();
-    setIsAuthenticated(false);
-    setIsAdminState(false);
-    setCurrentUser(null);
-    setPagePermissions({});
-    setUsers([]);
-    setSelectedCharacter(null);
-    navigate("tracker");
-  };
-
-  useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      setCurrentUser(null);
-      setPagePermissions({});
-      return;
-    }
-    fetchUserInfo(token).then((ok) => {
-      if (!ok) {
-        logout();
+    setAuthBusy(true);
+    try {
+      const email = registerData.email.trim();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: registerData.password,
+        options: {
+          data: { username: registerData.username.trim() },
+          emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href,
+        },
+      });
+      if (error) {
+        setRegisterError(error.message);
+        return;
       }
-    });
-  }, []);
+      setRegisterData({ username: "", email: "", password: "", confirmPassword: "" });
+      setLoginData({ email, password: "" });
+      if (!data.session) setRegisterNotice(t("auth.confirmEmail"));
+      navigate(data.session ? "tracker" : "login");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) setOperationError(error.message);
+    else navigate("tracker");
+  };
 
   useEffect(() => {
     const requiredPermissions = {
@@ -516,8 +485,10 @@ function App() {
     };
 
     if (["login", "register"].includes(activeView)) {
+      if (isAuthenticated) navigate("tracker");
       return;
     }
+    if (isAuthenticated && !currentUser) return;
 
     if (!isAuthenticated) {
       if (activeView !== "tracker") {
@@ -535,19 +506,14 @@ function App() {
     if (!hasPagePermission(pageKey, level)) {
       navigate("tracker");
     }
-  }, [activeView, isAuthenticated, pagePermissions]);
+  }, [activeView, isAuthenticated, currentUser, pagePermissions]);
 
   // Campaign: Submit Event
   const submitEvent = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/events`, {
+    const response = await request(`/events`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(eventDraft),
+      body: eventDraft,
     });
     if (response.ok) {
       setEventError("");
@@ -567,7 +533,7 @@ function App() {
   // Admin: Load events for a specific map
   const loadAdminMapEvents = async (mapId) => {
     try {
-      const response = await fetch(`${API_URL}/events?map_id=${mapId}`);
+      const response = await request(`/events?map_id=${mapId}`);
       if (response.ok) setAdminMapEvents(await response.json());
     } catch (error) {
       console.error(error);
@@ -576,10 +542,8 @@ function App() {
 
   // Campaign: Delete Event
   const deleteEvent = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/events/${id}`, {
+    await request(`/events/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshEvents();
     if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
@@ -588,23 +552,17 @@ function App() {
   // Resources: Submit Resource
   const submitResource = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/resources`, {
+    const response = await request(`/resources`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ ...resourceDraft, quantity: Number(resourceDraft.quantity) }),
+      body: { ...resourceDraft, quantity: Number(resourceDraft.quantity) },
     });
     if (response.ok) {
       const created = await response.json();
       if (resourceImageFile) {
         const fd = new FormData();
         fd.append("file", resourceImageFile);
-        await fetch(`${API_URL}/resources/${created.id}/image`, {
+        await request(`/resources/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setResourceImageFile(null);
@@ -625,23 +583,17 @@ function App() {
   // Diary: Submit Diary Entry
   const submitDiary = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/diary`, {
+    const response = await request(`/diary`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(diaryDraft),
+      body: diaryDraft,
     });
     if (response.ok) {
       const created = await response.json();
       if (diaryImageFile) {
         const fd = new FormData();
         fd.append("file", diaryImageFile);
-        await fetch(`${API_URL}/diary/${created.id}/image`, {
+        await request(`/diary/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setDiaryImageFile(null);
@@ -662,23 +614,17 @@ function App() {
   // Characters: Submit Character
   const submitCharacter = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/characters`, {
+    const response = await request(`/characters`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(characterDraft),
+      body: characterDraft,
     });
     if (response.ok) {
       const created = await response.json();
       if (characterImageFile) {
         const fd = new FormData();
         fd.append("file", characterImageFile);
-        await fetch(`${API_URL}/characters/${created.id}/image`, {
+        await request(`/characters/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setCharacterImageFile(null);
@@ -692,28 +638,22 @@ function App() {
   };
 
   const uploadCharacterImage = async (characterId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/characters/${characterId}/image`, {
+    const response = await request(`/characters/${characterId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
-    refreshCharacters();
-    // update selectedCharacter if viewing it
-    setSelectedCharacter((prev) => prev?.id === characterId ? { ...prev, image_path: URL.createObjectURL(file) } : prev);
+    if (response.ok) refreshCharacters();
   };
 
   // Characters: Upload Sheet
   const uploadCharacterSheet = async (characterId, file) => {
-    const token = getAuthToken();
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch(`${API_URL}/characters/${characterId}/upload-sheet`, {
+    const response = await request(`/characters/${characterId}/upload-sheet`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
@@ -728,10 +668,8 @@ function App() {
   // Characters: Delete Character
   const deleteCharacter = async (id) => {
     if (!confirm(t('characters.deleteConfirm'))) return;
-    const token = getAuthToken();
-    await fetch(`${API_URL}/characters/${id}`, {
+    await request(`/characters/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshCharacters();
     if (selectedCharacter?.id === id) {
@@ -742,19 +680,16 @@ function App() {
   // Characters: Load Character Details
   const loadCharacterDetails = async (character) => {
     setSelectedCharacter(character);
-    const token = getAuthToken();
 
     // Load inventory
-    const invResponse = await fetch(`${API_URL}/characters/${character.id}/inventory`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const invResponse = await request(`/characters/${character.id}/inventory`, {
     });
     if (invResponse.ok) {
       setCharacterInventory(await invResponse.json());
     }
 
     // Load diary
-    const diaryResponse = await fetch(`${API_URL}/characters/${character.id}/diary`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const diaryResponse = await request(`/characters/${character.id}/diary`, {
     });
     if (diaryResponse.ok) {
       setCharacterDiary(await diaryResponse.json());
@@ -766,14 +701,9 @@ function App() {
     event.preventDefault();
     if (!selectedCharacter) return;
 
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/characters/${selectedCharacter.id}/inventory`, {
+    const response = await request(`/characters/${selectedCharacter.id}/inventory`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ ...inventoryDraft, character_id: selectedCharacter.id }),
+      body: { ...inventoryDraft, character_id: selectedCharacter.id },
     });
 
     if (response.ok) {
@@ -784,10 +714,8 @@ function App() {
 
   // Character Inventory: Delete Item
   const deleteInventoryItem = async (itemId) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/inventory/${itemId}`, {
+    await request(`/inventory/${itemId}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     loadCharacterDetails(selectedCharacter);
   };
@@ -797,14 +725,9 @@ function App() {
     event.preventDefault();
     if (!selectedCharacter) return;
 
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/characters/${selectedCharacter.id}/diary`, {
+    const response = await request(`/characters/${selectedCharacter.id}/diary`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ ...charDiaryDraft, character_id: selectedCharacter.id }),
+      body: { ...charDiaryDraft, character_id: selectedCharacter.id },
     });
 
     if (response.ok) {
@@ -816,23 +739,17 @@ function App() {
   // Bestiary: Submit Creature
   const submitCreature = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/creatures`, {
+    const response = await request(`/creatures`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(creatureDraft),
+      body: creatureDraft,
     });
     if (response.ok) {
       const created = await response.json();
       if (creatureImageFile) {
         const fd = new FormData();
         fd.append("file", creatureImageFile);
-        await fetch(`${API_URL}/creatures/${created.id}/image`, {
+        await request(`/creatures/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setCreatureImageFile(null);
@@ -847,10 +764,8 @@ function App() {
 
   // Bestiary: Delete Creature
   const deleteCreature = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/creatures/${id}`, {
+    await request(`/creatures/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshCreatures();
   };
@@ -858,23 +773,17 @@ function App() {
   // Allies: Submit Ally
   const submitAlly = async (event) => {
     event.preventDefault();
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/allies`, {
+    const response = await request(`/allies`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(allyDraft),
+      body: allyDraft,
     });
     if (response.ok) {
       const created = await response.json();
       if (allyImageFile) {
         const fd = new FormData();
         fd.append("file", allyImageFile);
-        await fetch(`${API_URL}/allies/${created.id}/image`, {
+        await request(`/allies/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setAllyImageFile(null);
@@ -889,54 +798,44 @@ function App() {
 
   // Allies: Delete Ally
   const deleteAlly = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/allies/${id}`, {
+    await request(`/allies/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshAllies();
   };
 
   const uploadAllyImage = async (allyId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/allies/${allyId}/image`, {
+    await request(`/allies/${allyId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     refreshAllies();
   };
 
   const setAllyAlignment = async (allyId, alignment) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/allies/${allyId}/alignment?alignment=${alignment}`, {
+    await request(`/allies/${allyId}/alignment?alignment=${alignment}`, {
       method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshAllies();
   };
 
   const uploadCreatureImage = async (creatureId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/creatures/${creatureId}/image`, {
+    await request(`/creatures/${creatureId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     refreshCreatures();
   };
 
   const uploadDiaryImage = async (entryId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/diary/${entryId}/image`, {
+    await request(`/diary/${entryId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     refreshDiaryEntries();
@@ -944,20 +843,17 @@ function App() {
 
   const submitOrganization = async (e) => {
     e.preventDefault();
-    const token = getAuthToken();
-    const res = await fetch(`${API_URL}/organizations`, {
+    const res = await request(`/organizations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(orgDraft),
+      body: orgDraft,
     });
     if (res.ok) {
       const created = await res.json();
       if (orgImageFile) {
         const fd = new FormData();
         fd.append("file", orgImageFile);
-        await fetch(`${API_URL}/organizations/${created.id}/image`, {
+        await request(`/organizations/${created.id}/image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         setOrgImageFile(null);
@@ -971,19 +867,16 @@ function App() {
   };
 
   const deleteOrganization = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/organizations/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await request(`/organizations/${id}`, { method: "DELETE" });
     if (selectedOrg?.id === id) setSelectedOrg(null);
     refreshOrganizations();
   };
 
   const uploadOrganizationImage = async (orgId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/organizations/${orgId}/image`, {
+    await request(`/organizations/${orgId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     refreshOrganizations();
@@ -992,17 +885,16 @@ function App() {
   // Maps: Upload Map
   const uploadMap = async (event) => {
     event.preventDefault();
-    const formData = new FormData(event.target);
-    const token = getAuthToken();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
 
-    const response = await fetch(`${API_URL}/maps`, {
+    const response = await request(`/maps`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
     if (response.ok) {
-      event.target.reset();
+      form.reset();
       refreshMaps();
       alert("Map uploaded successfully!");
     } else {
@@ -1013,10 +905,8 @@ function App() {
   // Maps: Delete Map
   const deleteMap = async (id) => {
     if (!confirm("Delete this map?")) return;
-    const token = getAuthToken();
-    await fetch(`${API_URL}/maps/${id}`, {
+    await request(`/maps/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     refreshMaps();
     if (selectedMap?.id === id) {
@@ -1028,7 +918,7 @@ function App() {
   // Maps: Load POIs for a map (admin panel)
   const loadMapPOIs = async (mapId) => {
     try {
-      const response = await fetch(`${API_URL}/maps/${mapId}/pois`);
+      const response = await request(`/maps/${mapId}/pois`);
       if (response.ok) {
         setSelectedMapPOIs(await response.json());
       }
@@ -1040,7 +930,7 @@ function App() {
   // Maps: Load POIs for tracker view
   const loadTrackerMapPOIs = async (mapId) => {
     try {
-      const response = await fetch(`${API_URL}/maps/${mapId}/pois`);
+      const response = await request(`/maps/${mapId}/pois`);
       if (response.ok) {
         setTrackerMapPOIs(await response.json());
       }
@@ -1068,18 +958,16 @@ function App() {
   const submitPOI = async (e) => {
     e.preventDefault();
     if (!selectedMap || !poiDraft) return;
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/pois`, {
+    const response = await request(`/pois`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
+      body: {
         map_id: selectedMap.id,
         title: poiDraftData.title,
         description: poiDraftData.description,
         poi_type: poiDraftData.poi_type,
         latitude: poiDraft.latitude,
         longitude: poiDraft.longitude,
-      }),
+      },
     });
     if (response.ok) {
       const newPoi = await response.json();
@@ -1092,12 +980,10 @@ function App() {
   };
 
   const uploadMarkerImage = async (type, id, file) => {
-    const token = getAuthToken();
     const formData = new FormData();
     formData.append("file", file);
-    await fetch(`${API_URL}/${type}/${id}/image`, {
+    await request(`/${type}/${id}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
   };
@@ -1112,31 +998,44 @@ function App() {
     if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
   };
 
+  useEffect(() => {
+    const refreshMapDetails = () => {
+      if (!hasPagePermission("tracker")) return;
+      if (trackerMap) loadTrackerMapPOIs(trackerMap.id);
+      if (selectedMap) loadMapPOIs(selectedMap.id);
+      if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
+    };
+    window.addEventListener("focus", refreshMapDetails);
+    const timer = setInterval(refreshMapDetails, 12 * 60 * 1000);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshMapDetails);
+    };
+  }, [trackerMap?.id, selectedMap?.id, adminEventMap?.id, pagePermissions.tracker]);
+
   // Tracker: submit unified marker (POI or event)
   const submitTrackerMarker = async (e) => {
     e.preventDefault();
     if (!trackerMarkerDraft || !trackerMap) return;
-    const token = getAuthToken();
     const { title, description, kind, poi_type, event_type } = trackerMarkerForm;
 
     let newId = null;
     if (kind === "poi") {
-      const res = await fetch(`${API_URL}/pois`, {
+      const res = await request(`/pois`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ map_id: trackerMap.id, title, description, poi_type, latitude: trackerMarkerDraft.latitude, longitude: trackerMarkerDraft.longitude }),
+        body: { map_id: trackerMap.id, title, description, poi_type, latitude: trackerMarkerDraft.latitude, longitude: trackerMarkerDraft.longitude },
       });
       if (res.ok) { const d = await res.json(); newId = d.id; loadTrackerMapPOIs(trackerMap.id); }
     } else {
-      const res = await fetch(`${API_URL}/events`, {
+      const res = await request(`/events`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ map_id: trackerMap.id, title, description, event_type, latitude: trackerMarkerDraft.latitude, longitude: trackerMarkerDraft.longitude }),
+        body: { map_id: trackerMap.id, title, description, event_type, latitude: trackerMarkerDraft.latitude, longitude: trackerMarkerDraft.longitude },
       });
       if (res.ok) { const d = await res.json(); newId = d.id; refreshEvents(); }
     }
 
-    if (newId && trackerMarkerImageFile) {
+    if (!newId) return;
+    if (trackerMarkerImageFile) {
       const type = kind === "poi" ? "pois" : "events";
       await uploadMarkerImage(type, newId, trackerMarkerImageFile);
       if (kind === "poi") loadTrackerMapPOIs(trackerMap.id);
@@ -1150,20 +1049,17 @@ function App() {
 
   // Tracker: delete a POI from the tracker view
   const deleteTrackerPOI = async (poiId) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/pois/${poiId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await request(`/pois/${poiId}`, { method: "DELETE" });
     if (trackerMap) loadTrackerMapPOIs(trackerMap.id);
   };
 
   const updatePOI = async (e) => {
     e.preventDefault();
     if (!editingPoi) return;
-    const token = getAuthToken();
     const { id, title, description, poi_type } = editingPoi;
-    const res = await fetch(`${API_URL}/pois/${id}`, {
+    const res = await request(`/pois/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, description, poi_type }),
+      body: { title, description, poi_type },
     });
     if (res.ok) {
       if (editingPoiImageFile) {
@@ -1179,12 +1075,10 @@ function App() {
   const updateEvent = async (e) => {
     e.preventDefault();
     if (!editingEvent) return;
-    const token = getAuthToken();
     const { id, title, description, event_type, latitude, longitude, map_id } = editingEvent;
-    const res = await fetch(`${API_URL}/events/${id}`, {
+    const res = await request(`/events/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, description, event_type, latitude, longitude, map_id }),
+      body: { title, description, event_type, latitude, longitude, map_id },
     });
     if (res.ok) {
       if (editingEventImageFile) {
@@ -1198,25 +1092,21 @@ function App() {
 
   // Diary: delete entry
   const deleteDiaryEntry = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/diary/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await request(`/diary/${id}`, { method: "DELETE" });
     refreshDiaryEntries();
   };
 
   // Resources: delete resource
   const deleteResource = async (id) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/resources/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await request(`/resources/${id}`, { method: "DELETE" });
     refreshResources();
   };
 
   const uploadResourceImage = async (resourceId, file) => {
-    const token = getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    await fetch(`${API_URL}/resources/${resourceId}/image`, {
+    await request(`/resources/${resourceId}/image`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     refreshResources();
@@ -1224,10 +1114,8 @@ function App() {
 
   // Maps: Delete POI
   const deletePOI = async (poiId) => {
-    const token = getAuthToken();
-    await fetch(`${API_URL}/pois/${poiId}`, {
+    await request(`/pois/${poiId}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
     if (selectedMap) {
       loadMapPOIs(selectedMap.id);
@@ -1236,9 +1124,7 @@ function App() {
 
   // Users: Load all users (admin only)
   const loadUsers = async () => {
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/users`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const response = await request(`/users`, {
     });
     if (response.ok) {
       setUsers(await response.json());
@@ -1250,18 +1136,13 @@ function App() {
   const createUser = async (event) => {
     event.preventDefault();
     setUserManagementError("");
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/users`, {
+    const response = await request(`/users`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(newUserData),
+      body: newUserData,
     });
 
     if (response.ok) {
-      setNewUserData({ username: "", password: "" });
+      setNewUserData({ username: "", email: "", password: "" });
       loadUsers();
       return;
     }
@@ -1269,14 +1150,9 @@ function App() {
   };
 
   const updatePermission = async (userId, pageKey, permissionLevel) => {
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/users/${userId}/permissions/${pageKey}`, {
+    const response = await request(`/users/${userId}/permissions/${pageKey}`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ permission_level: permissionLevel }),
+      body: { permission_level: permissionLevel },
     });
 
     if (response.ok) {
@@ -1297,9 +1173,6 @@ function App() {
       if (currentUser?.id === userId) {
         const nextPermissions = { ...pagePermissions, [pageKey]: permissionLevel };
         setPagePermissions(nextPermissions);
-        const hasAdminAccess = hasLevel(nextPermissions.admin ?? "none", "admin");
-        setIsAdmin(hasAdminAccess);
-        setIsAdminState(hasAdminAccess);
       }
       return;
     }
@@ -1313,14 +1186,9 @@ function App() {
       return;
     }
 
-    const token = getAuthToken();
-    const response = await fetch(`${API_URL}/users/${userId}/password`, {
+    const response = await request(`/users/${userId}/password`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ password }),
+      body: { password },
     });
 
     if (response.ok) {
@@ -1393,6 +1261,9 @@ function App() {
           )}
         </div>
       </header>
+      {operationError && <p className="error" role="alert">{operationError}</p>}
+      {(pending > 0 || (isAuthenticated && !currentUser && !operationError)) &&
+        <p role="status">{t("common.loading")}</p>}
 
       {/* LOGIN VIEW */}
       {activeView === "login" && !isAuthenticated ? (
@@ -1401,9 +1272,11 @@ function App() {
             <h2>{t('auth.login')}</h2>
             <form onSubmit={login} className="form">
               <input
-                value={loginData.username}
-                onChange={(event) => setLoginData((old) => ({ ...old, username: event.target.value }))}
-                placeholder={t('auth.username')}
+                type="email"
+                autoComplete="email"
+                value={loginData.email}
+                onChange={(event) => setLoginData((old) => ({ ...old, email: event.target.value }))}
+                placeholder={t("auth.email")}
                 required
               />
               <input
@@ -1413,8 +1286,9 @@ function App() {
                 placeholder={t('auth.password')}
                 required
               />
-              <button type="submit">{t('auth.login')}</button>
+              <button type="submit" disabled={authBusy}>{t('auth.login')}</button>
             </form>
+            {registerNotice && <p role="status">{registerNotice}</p>}
             {loginError ? <p className="error">{loginError}</p> : null}
             <p>
               <small>
@@ -1442,6 +1316,13 @@ function App() {
                 required
               />
               <input
+                type="email"
+                value={registerData.email}
+                onChange={(event) => setRegisterData((old) => ({ ...old, email: event.target.value }))}
+                placeholder={t("auth.email")}
+                required
+              />
+              <input
                 type="password"
                 value={registerData.password}
                 onChange={(event) => setRegisterData((old) => ({ ...old, password: event.target.value }))}
@@ -1456,7 +1337,7 @@ function App() {
                 placeholder={t('auth.confirmPassword')}
                 required
               />
-              <button type="submit">{t('auth.register')}</button>
+              <button type="submit" disabled={authBusy}>{t('auth.register')}</button>
             </form>
             {registerError ? <p className="error">{registerError}</p> : null}
             <p>
@@ -1472,7 +1353,7 @@ function App() {
       ) : null}
 
       {/* TRACKER VIEW */}
-      {activeView === "tracker" ? (
+      {activeView === "tracker" && (!isAuthenticated || hasPagePermission("tracker")) ? (
         <section className="grid">
           <article className="card wide">
             {!hasTrackerMap ? (
@@ -1535,7 +1416,7 @@ function App() {
                 <MapView
                   events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
                   onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
-                  mapImageUrl={trackerMap ? `${API_URL}/${trackerMap.file_path}` : null}
+                  mapImageUrl={trackerMap ? trackerMap.file_path : null}
                   tempMarker={trackerMarkerDraft}
                 />
 
@@ -1690,9 +1571,9 @@ function App() {
                 <li key={item.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0", borderBottom: "1px solid #e8d5b0", flexWrap: "wrap" }}>
                   {item.image_path ? (
                     <img
-                      src={`${API_URL}/${item.image_path}`}
+                      src={item.image_path}
                       alt={item.name}
-                      onClick={() => setSelectedResourceImage(`${API_URL}/${item.image_path}`)}
+                      onClick={() => setSelectedResourceImage(item.image_path)}
                       style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513" }}
                       title={t('common.clickToView')}
                     />
@@ -1768,9 +1649,9 @@ function App() {
                   <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
                   {entry.image_path && (
                     <img
-                      src={`${API_URL}/${entry.image_path}`}
+                      src={entry.image_path}
                       alt={entry.title}
-                      onClick={() => setSelectedDiaryImage(`${API_URL}/${entry.image_path}`)}
+                      onClick={() => setSelectedDiaryImage(entry.image_path)}
                       style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain", borderRadius: "4px", cursor: "pointer", marginTop: "0.5rem", border: "1px solid #ddd" }}
                       title={t('common.clickToViewFull')}
                     />
@@ -1851,9 +1732,9 @@ function App() {
                     <li key={char.id} className="row" style={{ alignItems: "center", gap: "0.75rem" }}>
                       {char.image_path ? (
                         <img
-                          src={`${API_URL}/${char.image_path}`}
+                          src={char.image_path}
                           alt={char.name}
-                          onClick={() => setSelectedCharacterImage(`${API_URL}/${char.image_path}`)}
+                          onClick={() => setSelectedCharacterImage(char.image_path)}
                           style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
                           title={t('common.clickToView')}
                         />
@@ -1873,7 +1754,7 @@ function App() {
                           {t('common.view')}
                         </button>
                         {char.sheet_file_path && (
-                          <a href={`${API_URL}/${char.sheet_file_path}`} target="_blank" rel="noreferrer">
+                          <a href={char.sheet_file_path} target="_blank" rel="noreferrer">
                             <button type="button">{t('characters.sheet')}</button>
                           </a>
                         )}
@@ -1897,9 +1778,9 @@ function App() {
                     {selectedCharacter.image_path ? (
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
                         <img
-                          src={`${API_URL}/${selectedCharacter.image_path}`}
+                          src={selectedCharacter.image_path}
                           alt={selectedCharacter.name}
-                          onClick={() => setSelectedCharacterImage(`${API_URL}/${selectedCharacter.image_path}`)}
+                          onClick={() => setSelectedCharacterImage(selectedCharacter.image_path)}
                           style={{ width: "96px", height: "96px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "3px solid #8b4513" }}
                           title={t('common.clickToView')}
                         />
@@ -2030,9 +1911,9 @@ function App() {
                 <li key={creature.id} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                   {creature.image_path ? (
                     <img
-                      src={`${API_URL}/${creature.image_path}`}
+                      src={creature.image_path}
                       alt={creature.name}
-                      onClick={() => setSelectedCreatureImage(`${API_URL}/${creature.image_path}`)}
+                      onClick={() => setSelectedCreatureImage(creature.image_path)}
                       style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "4px", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
                       title={t('common.clickToView')}
                     />
@@ -2124,7 +2005,7 @@ function App() {
                   >
                     <div style={{ height: "120px", background: "var(--parchment-dark)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                       {org.image_path ? (
-                        <img src={`${API_URL}/${org.image_path}`} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={org.image_path} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
                         <span style={{ fontSize: "3rem" }}>🏰</span>
                       )}
@@ -2153,9 +2034,9 @@ function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "rgba(107,45,15,0.08)", borderBottom: "1px solid var(--gold-dark)" }}>
                   {selectedOrg.image_path && (
                     <img
-                      src={`${API_URL}/${selectedOrg.image_path}`}
+                      src={selectedOrg.image_path}
                       alt={selectedOrg.name}
-                      onClick={(e) => { e.stopPropagation(); setSelectedOrgImage(`${API_URL}/${selectedOrg.image_path}`); }}
+                      onClick={(e) => { e.stopPropagation(); setSelectedOrgImage(selectedOrg.image_path); }}
                       style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "6px", cursor: "zoom-in", border: "2px solid var(--gold-dark)", flexShrink: 0 }}
                     />
                   )}
@@ -2174,7 +2055,7 @@ function App() {
                       {allies.filter((a) => a.organization_id === selectedOrg.id).map((ally) => (
                         <div key={ally.id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.5rem 0.75rem", border: "1px solid var(--gold-dark)", borderRadius: "var(--border-radius)", background: "rgba(255,255,255,0.45)" }}>
                           {ally.image_path ? (
-                            <img src={`${API_URL}/${ally.image_path}`} alt={ally.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "50%", border: "2px solid var(--gold-dark)" }} />
+                            <img src={ally.image_path} alt={ally.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "50%", border: "2px solid var(--gold-dark)" }} />
                           ) : (
                             <span style={{ fontSize: "1.4rem" }}>👤</span>
                           )}
@@ -2213,9 +2094,9 @@ function App() {
                   <li key={ally.id} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                     {ally.image_path ? (
                       <img
-                        src={`${API_URL}/${ally.image_path}`}
+                        src={ally.image_path}
                         alt={ally.name}
-                        onClick={() => setSelectedAllyImage(`${API_URL}/${ally.image_path}`)}
+                        onClick={() => setSelectedAllyImage(ally.image_path)}
                         style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
                         title={t('common.clickToView')}
                       />
@@ -2338,7 +2219,7 @@ function App() {
                 <MapView
                   events={selectedMapPOIs}
                   onMapClick={addPOI}
-                  mapImageUrl={`${API_URL}/${selectedMap.file_path}`}
+                  mapImageUrl={selectedMap.file_path}
                   tempMarker={poiDraft}
                 />
                 {poiDraft && (
@@ -2399,7 +2280,7 @@ function App() {
                             <strong>{poi.title}</strong> ({poi.poi_type}){poi.description && ` — ${poi.description}`}
                           </span>
                           {poi.image_path ? (
-                            <img src={`${API_URL}/${poi.image_path}`} alt={poi.title} style={{ height: "36px", borderRadius: "3px" }} />
+                            <img src={poi.image_path} alt={poi.title} style={{ height: "36px", borderRadius: "3px" }} />
                           ) : (
                             <label style={{ fontSize: "0.8rem", cursor: "pointer" }}>
                               🖼️ {t('common.addImage')}
@@ -2577,6 +2458,13 @@ function App() {
                   required
                 />
                 <input
+                  type="email"
+                  value={newUserData.email}
+                  onChange={(event) => setNewUserData((old) => ({ ...old, email: event.target.value }))}
+                  placeholder={t("auth.email")}
+                  required
+                />
+                <input
                   type="password"
                   value={newUserData.password}
                   onChange={(event) => setNewUserData((old) => ({ ...old, password: event.target.value }))}
@@ -2611,12 +2499,12 @@ function App() {
                               {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "#8b4513" }}>{t('admin.currentUser')}</span> : null}
                             </td>
                             {PAGE_KEYS.map((pageKey) => {
-                              const isOwnAdminPermission = user.id === currentUser?.id && pageKey === "admin";
+                              const permissionLocked = user.is_admin || (user.id === currentUser?.id && pageKey === "admin");
                               return (
                                 <td key={pageKey}>
                                   <select
                                     value={permissionMap[pageKey] ?? "none"}
-                                    disabled={isOwnAdminPermission}
+                                    disabled={permissionLocked}
                                     onChange={(event) => updatePermission(user.id, pageKey, event.target.value)}
                                   >
                                     {PERMISSION_OPTIONS.map((option) => (
@@ -2634,7 +2522,7 @@ function App() {
                                   onChange={(event) => setPasswordResetDrafts((drafts) => ({ ...drafts, [user.id]: event.target.value }))}
                                   placeholder={t('admin.newPassword')}
                                 />
-                                <button type="button" onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
+                                <button type="button" disabled={user.is_admin && !currentUser?.is_admin} onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
                               </div>
                             </td>
                           </tr>

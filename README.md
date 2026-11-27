@@ -26,13 +26,30 @@ A comprehensive D&D campaign management system with:
 - **Admin users**: Full control over maps, events, diary, and all content
 - **Player users**: Can create characters, manage inventories, add bestiary entries, and contribute to party resources
 
-### Technical Stack
-- **Backend**: FastAPI with SQLAlchemy ORM
-- **Frontend**: React with Vite
-- **Database**: SQLite with file upload support
-- **Authentication**: JWT tokens with bcrypt password hashing
+## Aplicación serverless
 
-## Backend (FastAPI)
+El frontend React y Vite se publica en [GitHub Pages](https://karshkin.github.io/dnd-campaing-tracker/).
+Supabase Auth gestiona las sesiones, PostgreSQL aplica los permisos y Storage guarda los archivos
+en un bucket privado. El correo identifica la cuenta y el nombre de usuario sigue siendo visible
+en la aplicación. El panel de administración está en `/#/admin` dentro de la base de GitHub Pages.
+
+Consulta la [guía de migración y despliegue](supabase/README.md) para preparar Supabase,
+trasladar una campaña de SQLite, crear el primer administrador y validar el cambio.
+
+### Desarrollo del frontend
+
+```sh
+cd frontend
+cp .env.example .env.local
+npm ci
+npm run dev
+```
+
+Configura en `.env.local` la URL y la clave publicable del proyecto. Para usar un proyecto
+Supabase local, consulta la guía de validación. La URL que muestra Vite incluye la base
+`/dnd-campaing-tracker/`.
+
+## Backend anterior (FastAPI y SQLite)
 
 ### Unix/Mac
 ```bash
@@ -76,188 +93,7 @@ The API startup also runs pending migrations automatically before serving reques
 
 To add a new migration, create the next zero-padded SQL file in `backend/migrations/`, for example `015_some_change.sql`. Migrations run in filename order and each file is recorded once in `schema_migrations`, so keep each file focused on a single schema change.
 
-## Frontend (React + Vite)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend URL: `http://localhost:5173`
-
-By default the frontend calls `http://localhost:8000`. To change it:
-
-```bash
-VITE_API_URL="http://localhost:8000" npm run dev
-```
-
-## GitHub Pages Deployment
-
-The frontend can be deployed to GitHub Pages at:
-
-`https://karshkin.github.io/dnd-campaing-tracker/`
-
-The deployment workflow (`.github/workflows/deploy.yml`) automatically builds the React + Vite frontend from `frontend/` and publishes to GitHub Pages.
-
-> **Important Note**: The FastAPI backend is not deployed to GitHub Pages (only static frontend). The app will run in frontend-only mode on Pages. To use the full features with backend API, you need to deploy the backend separately and configure `VITE_API_URL`.
-
-### Enabling GitHub Pages
-
-To enable GitHub Pages for your repository:
-
-1. **Merge this branch to `main`** - The workflow only runs on pushes to the `main` branch
-2. **Enable GitHub Pages**:
-   - Go to your repository **Settings** → **Pages**
-   - Under **Build and deployment**, set **Source** to **Deploy from a branch**
-   - Select branch **`gh-pages`** and folder **`/ (root)`**
-   - Click **Save**
-3. **Wait for deployment** - After merging to `main`, GitHub Actions will automatically:
-   - Build the frontend
-   - Create/update the `gh-pages` branch
-   - Deploy to GitHub Pages
-4. **Access your app** - Visit `https://karshkin.github.io/dnd-campaing-tracker/` to see your deployed app
-
-The deployment will automatically update whenever you push changes to the `main` branch.
-
-## Authentication Setup
-
-The application supports two types of users:
-- **Admin users**: Can manage maps, map events, diary entries, and all resources (accessible via secret URL)
-- **Regular users**: Can view content, manage party resources, and create characters
-
-### Admin Access
-
-The admin panel is accessible via a secret URL route: **`http://localhost:5173/#admin`**
-
-Only users with admin privileges can access this panel. There is no visible button to prevent unauthorized discovery. If not logged in, navigating to this URL shows a login prompt.
-
-### Creating the First Admin User
-
-Before using the application, create an admin user:
-
-### Option 1: Using the create_admin.py script
-
-#### Unix/Mac
-```bash
-cd backend
-source .venv/bin/activate
-python create_admin.py
-```
-
-#### Windows (Git Bash)
-```bash
-cd backend
-source .venv/Scripts/activate
-python create_admin.py
-```
-
-#### Windows (PowerShell)
-```powershell
-cd backend
-.venv\Scripts\Activate.ps1
-python create_admin.py
-```
-
-### Option 2: Using curl (Unix/Mac/Git Bash)
-```bash
-curl -X POST http://localhost:8000/init-admin \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your-secure-password"}'
-```
-
-### Option 3: Using PowerShell
-```powershell
-Invoke-RestMethod -Uri http://localhost:8000/init-admin -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"username":"admin","password":"your-secure-password"}'
-```
-
-### Option 4: Using Python
-```bash
-# In backend directory with venv activated
-python -c "import requests; requests.post('http://localhost:8000/init-admin', json={'username':'admin','password':'your-secure-password'})"
-```
-
-**Important:** This endpoint only works when no users exist in the database. Change the default password after first login.
-
-Once created, you can login using the "Login" button in the frontend.
-
-### Registering Regular Users
-
-Players can register their own accounts using the "Register" button in the frontend. Regular users can:
-- View all content across the application
-- Add and update party resources
-- Create and manage their own characters
-- Upload character sheets
-- Manage character inventory and diary
-- Add creatures to the bestiary
-- Add allies/NPCs to the campaign
-
-**Note**: Regular users cannot access the admin panel at `#admin` even if they know the URL.
-
-## Frontend Routes
-
-The frontend uses hash-based routing:
-
-- `/#/tracker` (or `/`) - Main campaign chronicle view (public)
-- `/#/characters` - Character management (requires login)
-- `/#/bestiary` - Bestiary view (public, authenticated users can add)
-- `/#/allies` - Allies & NPCs view (public, authenticated users can add)
-- `/#/login` - Login page
-- `/#/register` - Registration page
-- `#admin` - **Admin panel** (requires admin privileges) - Secret URL for DM/admin only
-
-## API Endpoints
-
-The API is automatically documented at `http://localhost:8000/docs` (Swagger UI) when the server is running.
-
-### Authentication
-- `POST /login` - Login with username/password
-- `POST /register` - Register a new user
-- `POST /init-admin` - Create first admin user (one-time)
-- `GET /me` - Get current user info
-
-### Characters (Authenticated Users)
-- `GET /characters` - List user's characters
-- `POST /characters` - Create character
-- `PUT /characters/{id}` - Update character
-- `POST /characters/{id}/upload-sheet` - Upload character sheet file
-- `DELETE /characters/{id}` - Delete character
-- `GET /characters/{id}/inventory` - List character inventory
-- `POST /characters/{id}/inventory` - Add inventory item
-- `DELETE /inventory/{id}` - Delete inventory item
-- `GET /characters/{id}/diary` - List character diary entries
-- `POST /characters/{id}/diary` - Add diary entry
-
-### Maps (Admin for Create/Delete, All for Read)
-- `GET /maps` - List all maps
-- `POST /maps` - Upload new map (admin only)
-- `DELETE /maps/{id}` - Delete map (admin only)
-- `GET /maps/{id}/pois` - List points of interest on a map
-- `POST /pois` - Create point of interest (admin only)
-- `DELETE /pois/{id}` - Delete point of interest (admin only)
-
-### Resources (Authenticated Users)
-- `GET /resources` - List party resources
-- `POST /resources` - Add party resource
-- `PUT /resources/{id}` - Update party resource
-
-### Bestiary & Allies (Authenticated Users)
-- `GET /creatures` - List all creatures
-- `POST /creatures` - Add creature
-- `DELETE /creatures/{id}` - Delete creature (own or admin)
-- `GET /allies` - List all allies
-- `POST /allies` - Add ally
-- `DELETE /allies/{id}` - Delete ally (own or admin)
-
-### Campaign Diary & Events (Admin Only for Create/Update/Delete)
-- `GET /events` - List map events
-- `POST /events` - Create event (admin)
-- `PUT /events/{id}` - Update event (admin)
-- `DELETE /events/{id}` - Delete event (admin)
-- `GET /diary` - List campaign diary entries
-- `POST /diary` - Add diary entry (admin)
-
-## Tests
+## Pruebas de FastAPI
 
 ### Unix/Mac
 ```bash
