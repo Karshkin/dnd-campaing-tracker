@@ -4,6 +4,7 @@
     "subtitle": "Tome of Adventures"
   },
   "nav": {
+    "language": "Language",
     "chronicle": "📜 Chronicle",
     "characters": "🗡️ Characters",
     "bestiary": "🐉 Bestiary",
@@ -152,6 +153,7 @@
     "lvl": "Lvl"
   },
   "bestiary": {
+    "createError": "Could not add the creature.",
     "title": "Bestiary",
     "encountered": "Encountered Creatures",
     "type": "Type:",
@@ -166,6 +168,7 @@
     "notesLabel": "Notes:"
   },
   "organizations": {
+    "createError": "Could not create the organization.",
     "title": "🏰 Organizations",
     "empty": "No organizations yet.",
     "member": "member",
@@ -174,6 +177,7 @@
     "noMembers": "No NPCs assigned to this organization yet. Assign them from the NPCs tab."
   },
   "npcs": {
+    "createError": "Could not add the NPC.",
     "title": "👤 NPCs",
     "known": "Known NPCs",
     "allied": "✅ Allied",
@@ -187,6 +191,9 @@
     "addPortrait": "Add portrait"
   },
   "admin": {
+    "mapUploaded": "Map uploaded successfully.",
+    "mapUploadFailed": "Could not upload the map.",
+    "deleteMapConfirm": "Delete this map?",
     "manageMaps": "🗺️ Manage Maps",
     "uploadMap": "Upload New Map",
     "mapName": "Map Name",

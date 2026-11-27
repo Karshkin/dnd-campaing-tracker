@@ -570,3 +570,63 @@ a:hover {
     padding: 1rem 1rem 2rem;
   }
 }
+
+.campaign-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.5rem, 2vw, 1rem);
+}
+
+.campaign-logo {
+  flex: none;
+  width: clamp(2.2rem, 7vw, 4rem);
+  height: auto;
+}
+
+.language-picker {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.tabs .language-picker button {
+  display: grid;
+  place-items: center;
+  min-width: 2.35rem;
+  min-height: 2.2rem;
+  padding: 0.25rem;
+}
+
+.tabs .language-picker button[aria-pressed="true"] {
+  background: var(--sienna);
+  border-color: var(--sienna-dark);
+}
+
+.language-flag {
+  display: block;
+  width: 1.5rem;
+  height: 1rem;
+  border: 1px solid #51362c;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.language-flag-ca {
+  background: repeating-linear-gradient(#fcdd09 0 11.111%, #da121a 11.111% 22.222%);
+}
+
+.language-flag-es {
+  background: linear-gradient(#aa151b 25%, #f1bf00 25% 75%, #aa151b 75%);
+}
+
+.language-flag-en {
+  background:
+    linear-gradient(90deg, transparent 43%, #c8102e 43% 57%, transparent 57%),
+    linear-gradient(transparent 40%, #c8102e 40% 60%, transparent 60%),
+    linear-gradient(90deg, transparent 38%, white 38% 62%, transparent 62%),
+    linear-gradient(transparent 33%, white 33% 67%, transparent 67%),
+    linear-gradient(33deg, transparent 44%, white 44% 49%, #c8102e 49% 54%, white 54% 58%, transparent 58%),
+    linear-gradient(-33deg, transparent 44%, white 44% 49%, #c8102e 49% 54%, white 54% 58%, transparent 58%),
+    #012169;
+}

@@ -1,12 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
-import i18n from './i18n';
 
 import { CharacterGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
 const PERMISSION_RANK = { none: 0, view: 1, edit: 2, admin: 3 };
+
+const languages = [
+  { code: "ca", name: "Català" },
+  { code: "es", name: "Español" },
+  { code: "en", name: "English" },
+];
+
+function LanguagePicker() {
+  const { t, i18n } = useTranslation();
+  return (
+    <div className="language-picker" role="group" aria-label={t("nav.language")}>
+      {languages.map(({ code, name }) => (
+        <button key={code} type="button" lang={code} aria-label={name} title={name}
+          aria-pressed={i18n.resolvedLanguage === code} onClick={() => i18n.changeLanguage(code)}>
+          <span className={`language-flag language-flag-${code}`} aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const emptyCollection = [];
 const blankCharacter = () => ({
@@ -168,7 +187,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
           >
             <img
               src={mapImageUrl || "/map-placeholder.svg"}
-              alt="Campaign map"
+              alt={t("tracker.worldMap")}
               className="map-image"
               draggable={false}
             />
@@ -207,7 +226,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
               </button>
             </div>
             <div className="marker-popup-content">
-              <span className="marker-popup-type">{activeMarker.event_type || activeMarker.poi_type}</span>
+              <span className="marker-popup-type">{t(`tracker.${activeMarker.event_type || activeMarker.poi_type}`)}</span>
               {activeMarker.description && <p>{activeMarker.description}</p>}
               {activeMarker.image_path && (
                 <img src={activeMarker.image_path} alt={activeMarker.title} className="marker-popup-image" />
@@ -252,8 +271,8 @@ function Campaign({ session }) {
   const [activeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
     ? "tracker"
     : parseView());
-  const { t } = useTranslation();
-  const [lang, setLang] = useState(i18n.language);
+  const { t, i18n } = useTranslation();
+  const lang = i18n.resolvedLanguage;
   const [operationError, setOperationError] = useState("");
   const [pending, setPending] = useState(0);
 
@@ -774,7 +793,7 @@ function Campaign({ session }) {
       refreshCreatures();
       return;
     }
-    setCreatureError(await readErrorMessage(response, "Could not add creature."));
+    setCreatureError(await readErrorMessage(response, t("bestiary.createError")));
   };
 
   // Bestiary: Delete Creature
@@ -808,7 +827,7 @@ function Campaign({ session }) {
       refreshAllies();
       return;
     }
-    setAllyError(await readErrorMessage(response, "Could not add ally."));
+    setAllyError(await readErrorMessage(response, t("npcs.createError")));
   };
 
   // Allies: Delete Ally
@@ -877,7 +896,7 @@ function Campaign({ session }) {
       setOrgError("");
       refreshOrganizations();
     } else {
-      setOrgError(await readErrorMessage(res, "Could not create organization."));
+      setOrgError(await readErrorMessage(res, t("organizations.createError")));
     }
   };
 
@@ -911,15 +930,15 @@ function Campaign({ session }) {
     if (response.ok) {
       form.reset();
       refreshMaps();
-      alert("Map uploaded successfully!");
+      alert(t("admin.mapUploaded"));
     } else {
-      alert("Failed to upload map");
+      alert(t("admin.mapUploadFailed"));
     }
   };
 
   // Maps: Delete Map
   const deleteMap = async (id) => {
-    if (!confirm("Delete this map?")) return;
+    if (!confirm(t("admin.deleteMapConfirm"))) return;
     await request(`/maps/${id}`, {
       method: "DELETE",
     });
@@ -1217,16 +1236,12 @@ function Campaign({ session }) {
   return (
     <main>
       <header>
-        <h1>{t('app.title')}<span>{t('app.subtitle')}</span></h1>
+        <div className="campaign-brand">
+          <img className="campaign-logo" src={`${import.meta.env.BASE_URL}d20.png`} width="64" height="64" alt="" />
+          <h1>{t('app.title')}<span>{t('app.subtitle')}</span></h1>
+        </div>
         <div className="tabs">
-          <button
-            type="button"
-            onClick={() => { const next = lang.startsWith('es') ? 'en' : 'es'; i18n.changeLanguage(next); setLang(next); }}
-            title={lang.startsWith('es') ? 'Switch to English' : 'Cambiar a Español'}
-            style={{ fontSize: '1.1rem', padding: '0.35rem 0.6rem', minWidth: 'unset' }}
-          >
-            {lang.startsWith('es') ? '🇬🇧' : '🇪🇸'}
-          </button>
+          <LanguagePicker />
           {(!isAuthenticated || hasPagePermission("tracker", "view")) && (
             <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
               {t('nav.chronicle')}
@@ -1617,7 +1632,7 @@ function Campaign({ session }) {
               onClick={() => setSelectedResourceImage(null)}
               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}
             >
-              <img src={selectedResourceImage} alt="Resource" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+              <img src={selectedResourceImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
             </div>
           )}
 
@@ -1679,7 +1694,7 @@ function Campaign({ session }) {
 
           {selectedDiaryImage && (
             <div onClick={() => setSelectedDiaryImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-              <img src={selectedDiaryImage} alt="Diary entry" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+              <img src={selectedDiaryImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
             </div>
           )}
         </section>
@@ -2037,13 +2052,13 @@ function Campaign({ session }) {
 
       {selectedCreatureImage && (
         <div onClick={() => setSelectedCreatureImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-          <img src={selectedCreatureImage} alt="Creature" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+          <img src={selectedCreatureImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
         </div>
       )}
 
       {selectedCharacterImage && (
         <div onClick={() => setSelectedCharacterImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-          <img src={selectedCharacterImage} alt="Character" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+          <img src={selectedCharacterImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
         </div>
       )}
 
@@ -2151,7 +2166,7 @@ function Campaign({ session }) {
 
           {selectedOrgImage && (
             <div onClick={() => setSelectedOrgImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-              <img src={selectedOrgImage} alt="Organization" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+              <img src={selectedOrgImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
             </div>
           )}
         </section>
@@ -2244,7 +2259,7 @@ function Campaign({ session }) {
 
       {selectedAllyImage && (
         <div onClick={() => setSelectedAllyImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-          <img src={selectedAllyImage} alt="NPC portrait" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
+          <img src={selectedAllyImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
         </div>
       )}
 
