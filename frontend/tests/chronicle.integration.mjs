@@ -188,6 +188,25 @@ try {
   }
 
   await openAs(dm);
+  const chronicle = page.locator(".chronicle");
+  await chronicle.getByText("Galería", { exact: true }).click();
+  await chronicle.getByLabel("Imagen", { exact: true }).setInputFiles({
+    name: "faro.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await chronicle.getByLabel("Pie de foto", { exact: true }).fill("El faro al alba");
+  await chronicle.getByRole("button", { name: "Subir imagen", exact: true }).click();
+  const useCover = chronicle.getByRole("button", { name: "Usar en portada", exact: true });
+  await useCover.waitFor();
+  const image = ok(await director.from("chronicle_images").select().single());
+  cleanup.push(() => admin.storage.from("chronicle-images").remove([image.object_path]));
+  const publicClient = createClient(url, key, options);
+  assert.ok((await publicClient.storage.from("chronicle-images").createSignedUrl(image.object_path, 60)).error);
+  await useCover.click();
+  await page.waitForFunction(() => {
+    const cover = document.querySelector(".chronicle-cover img");
+    return cover?.complete && cover.naturalWidth > 0;
+  });
   await page.getByRole("button", { name: "Nueva sesión", exact: true }).click();
   await page.getByLabel("Título", { exact: true }).fill("Epílogo");
   await page.getByLabel("Fecha", { exact: true }).fill("2026-11-27");
@@ -218,6 +237,7 @@ try {
   await playerPage.locator('input[type="password"]').fill(password);
   await playerPage.locator('button[type="submit"]').click();
   await playerPage.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
   assert.equal(await playerPage.getByText("Solo DM", { exact: true }).count(), 0);
   assert.equal(await playerPage.getByRole("button", { name: "Nueva sesión", exact: true }).count(), 0);
   await playerPage.getByRole("heading", { name: "Monedero", exact: true }).waitFor();
@@ -225,7 +245,7 @@ try {
   assert.match(await inventory.locator(".treasury-wallet").textContent(), /Oro4/);
   await inventory.getByText("Ingresos, transferencias y reparto", { exact: true }).click();
   await inventory.getByLabel("Tipo", { exact: true }).selectOption("sp");
-  await inventory.getByLabel("Cantidad", { exact: true }).fill("2");
+  await inventory.getByRole("spinbutton", { name: "Cantidad", exact: true }).fill("2");
   await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
 

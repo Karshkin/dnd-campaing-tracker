@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 export function useCampaignQuery(load, revision) {
   const [data, setData] = useState(null);
@@ -52,8 +52,9 @@ export function useCampaignMutation(refresh) {
 }
 
 export function SelectRow({ label, rows, value, onChange, empty, required }) {
-  return <label>{label}
-    <select value={value} required={required} onChange={(event) => onChange(event.target.value)}>
+  const labelId = useId();
+  return <label><span id={labelId}>{label}</span>
+    <select aria-labelledby={labelId} value={value} required={required} onChange={(event) => onChange(event.target.value)}>
       {empty !== undefined && <option value="">{empty}</option>}
       {rows.map((row) => <option key={row.id} value={row.id}>{row.title ?? row.name}</option>)}
     </select>
@@ -61,8 +62,9 @@ export function SelectRow({ label, rows, value, onChange, empty, required }) {
 }
 
 export function Choices({ label, rows, values, onChange }) {
-  return <label>{label}
-    <select multiple value={values.map(String)} onChange={(event) => {
+  const labelId = useId();
+  return <label><span id={labelId}>{label}</span>
+    <select aria-labelledby={labelId} multiple value={values.map(String)} onChange={(event) => {
       onChange(Array.from(event.target.selectedOptions, (option) => Number(option.value)));
     }}>
       {rows.map((row) => <option key={row.id} value={row.id}>{row.title ?? row.name}</option>)}
