@@ -4,6 +4,7 @@
     "subtitle": "Tomo de Aventuras"
   },
   "nav": {
+    "language": "Idioma",
     "chronicle": "📜 Crónica",
     "characters": "🗡️ Personajes",
     "bestiary": "🐉 Bestiario",
@@ -152,6 +153,7 @@
     "lvl": "Nv."
   },
   "bestiary": {
+    "createError": "No se pudo añadir la criatura.",
     "title": "Bestiario",
     "encountered": "Criaturas Encontradas",
     "type": "Tipo:",
@@ -166,6 +168,7 @@
     "notesLabel": "Notas:"
   },
   "organizations": {
+    "createError": "No se pudo crear la organización.",
     "title": "🏰 Organizaciones",
     "empty": "Aún no hay organizaciones.",
     "member": "miembro",
@@ -174,6 +177,7 @@
     "noMembers": "Ningún PNJ asignado a esta organización todavía. Asígnalos desde la pestaña de PNJs."
   },
   "npcs": {
+    "createError": "No se pudo añadir el PNJ.",
     "title": "👤 PNJs",
     "known": "PNJs Conocidos",
     "allied": "✅ Aliado",
@@ -187,6 +191,9 @@
     "addPortrait": "Añadir retrato"
   },
   "admin": {
+    "mapUploaded": "Mapa subido correctamente.",
+    "mapUploadFailed": "No se pudo subir el mapa.",
+    "deleteMapConfirm": "¿Eliminar este mapa?",
     "manageMaps": "🗺️ Gestionar Mapas",
     "uploadMap": "Subir Nuevo Mapa",
     "mapName": "Nombre del Mapa",
