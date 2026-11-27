@@ -73,7 +73,8 @@ async function signMedia(rows) {
   const urls = new Map();
   // Keep the Storage request bounded while signing a page of database rows.
   for (let offset = 0; offset < paths.length; offset += 100) {
-    const signed = await value(bucket().createSignedUrls(paths.slice(offset, offset + 100), 900));
+    const batch = paths.slice(offset, offset + 100);
+    const signed = await value(bucket().createSignedUrls(batch, batch.some((path) => path.startsWith("diary_entries/")) ? 60 : 900));
     for (const entry of signed) urls.set(entry.path, entry.signedUrl);
   }
   return rows.map((row) => ({
@@ -437,6 +438,7 @@ export const groupInventory = {
 };
 
 const commentTargets = {
+  diary: "diary_id",
   maps: "map_id",
   characters: "character_id",
   creatures: "creature_id",

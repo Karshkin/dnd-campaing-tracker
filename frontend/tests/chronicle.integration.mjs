@@ -303,6 +303,68 @@ try {
   await playerPage.locator(".chronicle").getByRole("button", { name: "Galería", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
   await playerPage.setViewportSize({ width: 390, height: 844 });
+  const legacyDiary = await insert(admin, "diary_entries", { campaign_id: campaignId, title: "Registro anterior", content: "Debe conservarse" });
+  assert.equal(ok(await member.from("diary_entries").select("content").eq("id", legacyDiary.id).single()).content, "Debe conservarse");
+  const draft = { title: "Bitácora privada", content: "Solo la tripulación", visibility: "private", session_id: session.id, author_character_id: character.id };
+  assert.ok((await onlooker.from("diary_entries").insert(draft)).error);
+  const submitted = await insert(member, "diary_entries", draft);
+  assert.equal(submitted.author_character_name, "Niebla");
+  assert.equal(submitted.author_account_name, player.username);
+  assert.deepEqual(ok(await onlooker.from("diary_entries").select("id").eq("id", submitted.id)), []);
+  assert.equal(ok(await director.from("diary_entries").select("title").eq("id", submitted.id).single()).title, draft.title);
+  assert.ok((await onlooker.from("campaign_comments").insert({
+    diary_id: submitted.id, body: "No debería verlo", author_character_id: otherCharacter.id,
+  })).error);
+  assert.deepEqual(ok(await onlooker.from("diary_entries").update({ content: "Alteración" }).eq("id", submitted.id).select("id")), []);
+
+  await playerPage.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
+  await playerPage.getByRole("button", { name: "Entradas del diario", exact: true }).click();
+  const entryCard = playerPage.locator(".chronicle-panel").filter({ has: playerPage.getByRole("heading", { name: draft.title }) });
+  await entryCard.getByLabel("Añadir imagen", { exact: true }).setInputFiles({
+    name: "bitacora.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await entryCard.getByRole("img", { name: draft.title }).waitFor();
+  const diaryPath = ok(await member.from("diary_entries").select("image_path").eq("id", submitted.id).single()).image_path;
+  cleanup.push(() => admin.storage.from("campaign-files").remove([diaryPath]));
+  assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).error);
+  ok(await member.from("diary_entries").update({ visibility: "shared" }).eq("id", submitted.id));
+  assert.ok(ok(await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).signedUrl);
+  ok(await onlooker.from("campaign_comments").insert({
+    diary_id: submitted.id, body: "Anotado", author_character_id: otherCharacter.id,
+  }));
+  assert.equal(ok(await member.from("campaign_comments").select("body").eq("diary_id", submitted.id).single()).body, "Anotado");
+  ok(await member.from("diary_entries").update({ visibility: "private" }).eq("id", submitted.id));
+  assert.deepEqual(ok(await onlooker.from("campaign_comments").select("body").eq("diary_id", submitted.id)), []);
+  assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).error);
+  ok(await member.from("diary_entries").delete().eq("id", submitted.id).select().single());
+  ok(await member.storage.from("campaign-files").remove([diaryPath]));
+
+  const questDraft = {
+    title: "Recuperar el mapa", author_character_id: character.id, visibility: "private", priority: "high",
+    objectives: [{ title: "Encontrar la llave", done: false }], participants: [character.id, otherCharacter.id],
+    organization_ids: [faction.id, secondFaction.id], session_id: session.id,
+  };
+  assert.ok((await onlooker.from("chronicle_quests").insert(questDraft)).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, status: "completed" })).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, npc_ids: [foreignNpc.id] })).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, participants: [character.id, character.id] })).error);
+  const proposal = await insert(member, "chronicle_quests", questDraft);
+  assert.deepEqual(proposal.organization_ids, [faction.id, secondFaction.id]);
+  assert.deepEqual(ok(await onlooker.from("chronicle_quests").select("id").eq("id", proposal.id)), []);
+  assert.ok((await member.from("chronicle_quests").update({ rewards: "Oro" }).eq("id", proposal.id)).error);
+  assert.ok((await member.from("chronicle_quests").update({ status: "failed" }).eq("id", proposal.id)).error);
+  ok(await member.from("chronicle_quests").update({ proposed_status: "completed" }).eq("id", proposal.id));
+  ok(await director.from("chronicle_quests").update({ status: "completed", rewards: "Oro" }).eq("id", proposal.id));
+  await playerPage.reload();
+  await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
+  const questCard = playerPage.locator(".chronicle-panel").filter({ has: playerPage.getByRole("heading", { name: questDraft.title }) });
+  await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).check();
+  await playerPage.reload();
+  await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
+  await questCard.getByText("Recompensas: Oro", { exact: true }).waitFor();
+  assert.ok(await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).isChecked());
+
   await playerPage.getByRole("button", { name: "Inventario grupal", exact: true }).click();
   await playerPage.getByRole("heading", { name: "Monedero", exact: true }).waitFor();
   assert.equal(await playerPage.getByRole("heading", { name: "Crónica de aventuras" }).count(), 0);
