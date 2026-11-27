@@ -61,6 +61,7 @@
     "sessionExpired": "Session expired. Please login again."
   },
   "tracker": {
+    "closeMarker": "Close map marker",
     "worldMap": "World Map",
     "noMapTitle": "No map available yet",
     "noMapMessage": "The Chronicle does not have a map yet.",

@@ -61,6 +61,7 @@
     "sessionExpired": "Sesión expirada. Por favor, vuelve a iniciar sesión."
   },
   "tracker": {
+    "closeMarker": "Cerrar punto del mapa",
     "worldMap": "Mapa del Mundo",
     "noMapTitle": "Todavia no hay un mapa disponible",
     "noMapMessage": "La Cronica todavia no tiene un mapa.",
