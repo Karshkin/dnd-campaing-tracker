@@ -1,0 +1,43 @@
+.campaign-header { flex-wrap: wrap; align-items: flex-start; border-color: var(--campaign-accent, var(--gold-dark)); }
+.campaign-header > :not(.campaign-cover) { position: relative; }
+.campaign-header .campaign-brand { flex: 1 1 22rem; justify-content: flex-start; min-width: 0; }
+.campaign-brand h1, .campaign-description { overflow-wrap: anywhere; }
+.campaign-description { margin: 0.4rem 0 0; white-space: pre-wrap; color: var(--ink-mid); }
+.campaign-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.campaign-logo { object-fit: contain; max-height: 4rem; border-radius: 0.25rem; }
+.campaign-selector { display: flex; flex-wrap: wrap; align-items: start; gap: 0.75rem; min-width: 0; }
+.campaign-selector label, .campaign-settings-form label, .campaign-create label { display: grid; gap: 0.25rem; min-width: 0; }
+.campaign-selector select { max-width: min(16rem, 100%); }
+.campaign-create { margin-block: 0.3rem 0.65rem; }
+.campaign-create summary { cursor: pointer; font-weight: 700; }
+.campaign-create form { margin-top: 0.45rem; }
+.campaign-theme .tabs .active { border-color: var(--campaign-accent, var(--gold-dark)); }
+.campaign-theme[data-theme="dark"] { --gold-dark: #695d6b; --gold: #a997aa; --sienna: #47374a; --sienna-dark: #34243a; }
+.campaign-theme[data-theme="arcane"] { --gold-dark: #74609a; --gold: #b09acb; --sienna: #594171; --sienna-dark: #322145; }
+.campaign-theme[data-theme="dark"] .campaign-header,
+.campaign-preview[data-theme="dark"] { background: linear-gradient(135deg,#ddd2d9,#ab9cae); }
+.campaign-theme[data-theme="arcane"] .campaign-header,
+.campaign-preview[data-theme="arcane"] { background: linear-gradient(135deg,#f1e3fa,#d1bee8); }
+.campaign-theme[data-theme="dark"] .card { background: linear-gradient(145deg,#e7dce0,#cbbcc8); }
+.campaign-theme[data-theme="arcane"] .card { background: linear-gradient(145deg,#f6ecfb,#e3d1f0); }
+.campaign-preview {
+  position: relative;
+  overflow: hidden;
+  padding: 1rem;
+  margin-block: 0.75rem;
+  border: 2px solid var(--campaign-accent);
+  border-radius: var(--border-radius);
+  background: var(--parchment);
+}
+.campaign-preview .campaign-brand { position: relative; min-height: 4rem; }
+.campaign-preview h3 { margin: 0; overflow-wrap: anywhere; }
+.campaign-settings-form input[type="color"] { max-width: 5rem; padding: 0.2rem; }
+.campaign-settings-form input[type="file"] { min-width: 0; max-width: 100%; }

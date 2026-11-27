@@ -40,6 +40,25 @@ function formFile(filename, type, data) {
 }
 
 try {
+  const dm = ok(await admin.auth.admin.createUser({
+    email: adminEmail, password, email_confirm: true, user_metadata: { username: `DM ${run}` },
+  })).user;
+  cleanup.push(() => admin.auth.admin.deleteUser(dm.id));
+  const dmAccount = createClient(url, key, options);
+  const dmSession = ok(await dmAccount.auth.signInWithPassword({ email: adminEmail, password })).session;
+  const campaignId = ok(await dmAccount.rpc("manage_campaign", {
+    action: "create", payload: { name: `Campaign ${run}` },
+  }));
+  const otherCampaignId = ok(await dmAccount.rpc("manage_campaign", {
+    action: "create", payload: { name: `Other ${run}` },
+  }));
+  cleanup.push(() => admin.from("campaigns").delete().in("id", [campaignId, otherCampaignId]));
+  const scopedClient = (campaign) => createClient(url, key, {
+    ...options, global: { headers: { "x-campaign-id": campaign } },
+  });
+  const dmClient = scopedClient(campaignId);
+  ok(await dmClient.auth.setSession(dmSession));
+  globalThis.location = { search: `?campaign=${campaignId}` };
   const { campaignRequest: api, supabase, readProfile } = await vite.ssrLoadModule("/src/campaign.js");
   const player = ok(await supabase.auth.signUp({
     email: playerEmail, password,
@@ -47,45 +66,36 @@ try {
   })).user;
   cleanup.push(() => admin.auth.admin.deleteUser(player.id));
   ok(await supabase.auth.signOut());
-  ok(await supabase.auth.signInWithPassword({ email: playerEmail, password }));
+  const playerSession = ok(await supabase.auth.signInWithPassword({ email: playerEmail, password })).session;
   assert.equal(ok(await supabase.auth.getSession()).session.user.id, player.id);
+  assert.equal(await readProfile(), null);
+  assert.ok((await api("/users", { method: "POST", body: { username: "Unauthorized" } })).ok === false);
 
-  const dm = ok(await admin.auth.admin.createUser({
-    email: adminEmail, password, email_confirm: true, user_metadata: { username: `DM ${run}` },
+  const secondUser = ok(await admin.auth.admin.createUser({
+    email: secondEmail, password, email_confirm: true, user_metadata: { username: `Second ${run}` },
   })).user;
-  cleanup.push(() => admin.auth.admin.deleteUser(dm.id));
-  ok(await admin.from("profiles").update({ is_admin: true }).eq("id", dm.id));
-  const dmClient = createClient(url, key, options);
-  ok(await dmClient.auth.signInWithPassword({ email: adminEmail, password }));
-
-  const profile = await readProfile(player.id);
+  cleanup.push(() => admin.auth.admin.deleteUser(secondUser.id));
+  const second = scopedClient(campaignId);
+  ok(await second.auth.signInWithPassword({ email: secondEmail, password }));
+  for (const username of [`Player ${run}`, `Second ${run}`]) {
+    ok(await dmClient.rpc("manage_campaign", { action: "invite", payload: { username } }));
+  }
+  const profile = await readProfile();
   assert.equal(profile.username, `Player ${run}`);
   assert.equal(profile.is_admin, false);
   assert.equal(profile.permissions.find(({ page_key }) => page_key === "admin").permission_level, "none");
   assert.ok((await supabase.from("profiles").update({ is_admin: true }).eq("id", player.id)).error);
-  assert.deepEqual(ok(await supabase.from("page_permissions").update({ permission_level: "admin" })
-    .eq("user_id", player.id).select()), []);
-  assert.equal((await api("/users", { method: "POST", body: { email: secondEmail, password, username: "Unauthorized" } })).ok, false);
+  assert.ok((await supabase.from("page_permissions").update({ permission_level: "admin" })
+    .eq("user_id", player.id).select()).error);
+  ok(await dmClient.rpc("manage_campaign", { action: "permission",
+    payload: { userId: player.id, pageKey: "tracker", permission_level: "edit" } }));
+  assert.ok((await dmClient.rpc("manage_campaign", { action: "permission",
+    payload: { userId: dm.id, pageKey: "admin", permission_level: "none" } })).error);
 
-  const dmCreate = ok(await dmClient.functions.invoke("manage-users", {
-    body: { action: "create", email: secondEmail, password, username: `Second ${run}` },
-  }));
-  assert.equal(dmCreate.detail, "Account created");
-  const second = createClient(url, key, options);
-  const secondUser = ok(await second.auth.signInWithPassword({ email: secondEmail, password })).user;
-  cleanup.push(() => admin.auth.admin.deleteUser(secondUser.id));
-  const newPassword = `Changed-${run}!23`;
-  ok(await dmClient.functions.invoke("manage-users", {
-    body: { action: "reset", userId: secondUser.id, password: newPassword },
-  }));
-  assert.ok((await second.auth.signInWithPassword({ email: secondEmail, password })).error);
-  ok(await second.auth.signInWithPassword({ email: secondEmail, password: newPassword }));
-
-  const permissions = await dmClient.from("page_permissions").update({ permission_level: "edit" })
-    .eq("user_id", player.id).eq("page_key", "tracker").select().single();
-  ok(permissions);
-  assert.deepEqual(ok(await dmClient.from("page_permissions").update({ permission_level: "none" })
-    .eq("user_id", dm.id).eq("page_key", "admin").select()), []);
+  const outside = scopedClient(otherCampaignId);
+  ok(await outside.auth.setSession(playerSession));
+  assert.deepEqual(ok(await outside.from("campaigns").select("id").eq("id", otherCampaignId)), []);
+  assert.ok((await outside.rpc("manage_campaign", { action: "roster" })).error);
 
   const name = `Torch ${run}`;
   const resource = await request(api, "/resources", "POST", { name, quantity: 1 });
@@ -132,6 +142,20 @@ try {
   cleanup.push(() => admin.storage.from("character-gallery").remove([galleryRow.object_path]));
   const gallery = await request(api, galleryPath);
   assert.equal(gallery.length, 1);
+  const onlyOther = scopedClient(otherCampaignId);
+  const onlyOtherEmail = `isolated-${run}@example.com`;
+  const onlyOtherUser = ok(await admin.auth.admin.createUser({
+    email: onlyOtherEmail, password, email_confirm: true, user_metadata: { username: `Isolated ${run}` },
+  })).user;
+  cleanup.push(() => admin.auth.admin.deleteUser(onlyOtherUser.id));
+  ok(await onlyOther.auth.signInWithPassword({ email: onlyOtherEmail, password }));
+  const otherDm = scopedClient(otherCampaignId);
+  ok(await otherDm.auth.setSession(dmSession));
+  ok(await otherDm.rpc("manage_campaign", { action: "invite", payload: { username: `Isolated ${run}` } }));
+  assert.deepEqual(ok(await onlyOther.from("characters").select("id")), []);
+  assert.deepEqual(ok(await onlyOther.rpc("list_shared_character_sheets")), []);
+  assert.ok((await onlyOther.storage.from("character-gallery").createSignedUrl(galleryRow.object_path, 60)).error);
+
   assert.equal((await fetch(gallery[0].url)).status, 200);
   assert.deepEqual(ok(await second.from("character_gallery").select().eq("id", image.id)), []);
   assert.ok((await second.storage.from("character-gallery").createSignedUrl(galleryRow.object_path, 60)).error);
@@ -190,8 +214,9 @@ try {
   ok(await supabase.auth.signOut());
   assert.equal(ok(await supabase.auth.getSession()).session, null);
 
-  console.log("Passed local Auth, account administration, RLS, CRUD and private Storage checks.");
+  console.log("Passed local Auth, campaign memberships, RLS, CRUD and private Storage checks.");
 } finally {
   for (const remove of cleanup.reverse()) await remove();
+  delete globalThis.location;
   await vite.close();
 }
