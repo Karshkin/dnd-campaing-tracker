@@ -5,6 +5,9 @@ import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheet
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
+import { Chronicle } from "./Chronicle";
+import { Reputation } from "./Reputation";
+import { ItemDetails, PersonalWallet } from "./Treasury";
 import { CampaignAppearance, CampaignSelector, CampaignWorkspace } from "./CampaignWorkspace";
 import { campaignLink, campaignRequest, campaignSettings, readProfile, selectedCampaignRef, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
@@ -71,7 +74,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAP COMPONENT =====
-function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null }) {
+function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null, linkedPlace }) {
   const { t } = useTranslation();
   const containerRef = useRef(null);
   const innerRef = useRef(null);
@@ -92,6 +95,12 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
   }, [events]);
 
   useEffect(() => setSelection(null), [mapId]);
+
+  useEffect(() => {
+    if (linkedPlace?.map_id === mapId && linkedPlace) {
+      setSelection({ mapId, markerKey: `poi-${linkedPlace.id}` });
+    }
+  }, [linkedPlace, mapId]);
 
   const activeMarker = selection?.mapId === mapId
     ? markers.find((marker) => marker.markerKey === selection?.markerKey)
@@ -277,6 +286,9 @@ function App() {
 }
 
 function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin = false, onSaved }) {
+  const [entityAnchor, setEntityAnchor] = useState(null);
+  const [linkedPlace, setLinkedPlace] = useState(null);
+  const [closedSessions, setClosedSessions] = useState(0);
   const [activeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
     ? "tracker"
     : parseView());
@@ -295,6 +307,17 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     window.location.hash = view === "tracker" ? "" : `/${view}`;
     setActiveView(view);
   };
+
+  useEffect(() => {
+    if (!entityAnchor || entityAnchor.view !== activeView) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(entityAnchor.id);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: "start" });
+      setEntityAnchor(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeView, entityAnchor]);
 
   const request = async (path, options) => {
     const mutation = options?.method && options.method !== "GET";
@@ -1351,7 +1374,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {activeView === "tracker" && (!isAuthenticated || hasPagePermission("tracker")) ? (
         <section className="grid">
-          <article className="card wide">
+          <article className="card wide" id="campaign-map" tabIndex={-1}>
             {!hasTrackerMap ? (
               <div
                 style={{
@@ -1406,6 +1429,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
                 <MapView
                   mapId={trackerMap?.id}
+                  linkedPlace={linkedPlace}
                   events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
                   onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
                   mapImageUrl={trackerMap ? trackerMap.file_path : null}
@@ -1529,7 +1553,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
           <article className="card">
             <h2>{t('resources.title')}</h2>
-            {isAuthenticated && hasPagePermission("tracker") && <GroupInventory userId={userId} />}
+            {isAuthenticated && hasPagePermission("tracker") && <GroupInventory userId={userId} director={campaign?.is_director} revision={closedSessions}
+              characters={campaign?.is_director ? characters : commentAuthors} />}
             {hasPagePermission("tracker", "edit") && (
               <form onSubmit={submitResource} className="form" style={{ marginBottom: "1rem" }}>
                 <input
@@ -1599,61 +1624,86 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             </div>
           )}
 
-          <article className="card">
-            <h2>{t('diary.title')}</h2>
-            {hasPagePermission("tracker", "edit") && (
-              <form onSubmit={submitDiary} className="form" style={{ marginBottom: "1rem" }}>
-                <input
-                  value={diaryDraft.title}
-                  onChange={(e) => setDiaryDraft((old) => ({ ...old, title: e.target.value }))}
-                  placeholder={t('diary.entryTitle')}
-                  required
-                />
-                <textarea
-                  value={diaryDraft.content}
-                  onChange={(e) => setDiaryDraft((old) => ({ ...old, content: e.target.value }))}
-                  placeholder={t('diary.contentPlaceholder')}
-                  rows={4}
-                  required
-                />
-                <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                  {t('common.imageOptionalLabel')}
-                  <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setDiaryImageFile(e.target.files[0] || null)} />
-                </label>
-                {diaryImageFile && <small style={{ color: "#5d3a1a" }}>{diaryImageFile.name}</small>}
-                <button type="submit">{t('diary.add')}</button>
-                {diaryError ? <p className="error">{diaryError}</p> : null}
-              </form>
-            )}
-            <ul>
-              {diaryEntries.map((entry) => (
-                <li key={entry.id} style={{ borderBottom: "1px solid #e8d5b0", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
-                  <div className="row" style={{ alignItems: "flex-start" }}>
-                    <strong>{entry.title}</strong>
-                    <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                      {hasPagePermission("tracker", "edit") && (
-                        <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
-                          🖼️
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
-                        </label>
-                      )}
-                      {hasPagePermission("tracker", "edit") && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
+          {isAuthenticated && campaign && hasPagePermission("tracker") && <Chronicle campaignId={campaign.id}
+            director={campaign.is_director} characters={campaign.is_director ? characters : [...commentAuthors, ...companions]}
+            organizations={organizations} allies={allies} creatures={creatures} onClose={() => {
+              setClosedSessions((count) => count + 1);
+              refreshAllies();
+            }}
+            openEntity={(field, entry) => {
+              const views = { npc_id: "npcs", creature_id: "bestiary", organization_id: "organizations", place_id: "tracker" };
+              const view = views[field];
+              if (field === "organization_id") setSelectedOrg(entry);
+              if (field === "place_id") {
+                const map = maps.find(({ id }) => id === entry.map_id);
+                if (map) {
+                  setTrackerMap(map);
+                  setLinkedPlace(entry);
+                  loadTrackerMapPOIs(map.id);
+                }
+              }
+              setEntityAnchor({ id: field === "place_id" ? "campaign-map" : `${field}-${entry.id}`, view });
+              navigate(view);
+            }}
+            legacy={(search) => (
+            <details>
+              <summary>Entradas del diario</summary>
+              {hasPagePermission("tracker", "edit") && (
+                <form onSubmit={submitDiary} className="form" style={{ marginBottom: "1rem" }}>
+                  <input
+                    value={diaryDraft.title}
+                    onChange={(e) => setDiaryDraft((old) => ({ ...old, title: e.target.value }))}
+                    placeholder={t('diary.entryTitle')}
+                    required
+                  />
+                  <textarea
+                    value={diaryDraft.content}
+                    onChange={(e) => setDiaryDraft((old) => ({ ...old, content: e.target.value }))}
+                    placeholder={t('diary.contentPlaceholder')}
+                    rows={4}
+                    required
+                  />
+                  <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+                    {t('common.imageOptionalLabel')}
+                    <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setDiaryImageFile(e.target.files[0] || null)} />
+                  </label>
+                  {diaryImageFile && <small style={{ color: "#5d3a1a" }}>{diaryImageFile.name}</small>}
+                  <button type="submit">{t('diary.add')}</button>
+                  {diaryError ? <p className="error">{diaryError}</p> : null}
+                </form>
+              )}
+              <ul>
+                {diaryEntries.filter((entry) =>
+                  [entry.title, entry.content].some((text) => text.toLowerCase().includes(search.trim().toLowerCase())))
+                  .map((entry) => (
+                  <li key={entry.id} style={{ borderBottom: "1px solid #e8d5b0", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
+                    <div className="row" style={{ alignItems: "flex-start" }}>
+                      <strong>{entry.title}</strong>
+                      <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+                        {hasPagePermission("tracker", "edit") && (
+                          <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
+                            🖼️
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
+                          </label>
+                        )}
+                        {hasPagePermission("tracker", "edit") && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
+                      </div>
                     </div>
-                  </div>
-                  <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
-                  {entry.image_path && (
-                    <img
-                      src={entry.image_path}
-                      alt={entry.title}
-                      onClick={() => setSelectedDiaryImage(entry.image_path)}
-                      style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain", borderRadius: "4px", cursor: "pointer", marginTop: "0.5rem", border: "1px solid #ddd" }}
-                      title={t('common.clickToViewFull')}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          </article>
+                    <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
+                    {entry.image_path && (
+                      <img
+                        src={entry.image_path}
+                        alt={entry.title}
+                        onClick={() => setSelectedDiaryImage(entry.image_path)}
+                        style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain", borderRadius: "4px", cursor: "pointer", marginTop: "0.5rem", border: "1px solid #ddd" }}
+                        title={t('common.clickToViewFull')}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+            )} />}
 
           {selectedDiaryImage && (
             <div onClick={() => setSelectedDiaryImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
@@ -1871,6 +1921,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 {ownsSelectedCharacter && (
                   <section className="character-sheet-panel">
                     <h4>{t('characters.inventory')}</h4>
+                    <PersonalWallet key={selectedCharacter.id} characterId={selectedCharacter.id} />
                     {canEditSelectedCharacter && (
                       <form onSubmit={addInventoryItem} className="form">
                       <input
@@ -1899,7 +1950,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                         <li key={item.id} className="row">
                           <span>
                             <strong>{item.item_name}</strong> x{item.quantity}
-                            {item.description ? ` - ${item.description}` : ""}
+                            {item.details ? <ItemDetails details={item.details} /> : item.description && ` - ${item.description}`}
                           </span>
                           {canEditSelectedCharacter && (
                             <button type="button" onClick={() => deleteInventoryItem(item.id)}>
@@ -2041,7 +2092,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             <h3>{t('bestiary.encountered')}</h3>
             <ul>
               {creatures.map((creature) => (
-                <li key={creature.id} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <li key={creature.id} id={`creature_id-${creature.id}`} tabIndex={-1} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                   {creature.image_path ? (
                     <img
                       src={creature.image_path}
@@ -2192,7 +2243,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             </div>
 
             {selectedOrg && (
-              <div style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)" }}>
+              <div id={`organization_id-${selectedOrg.id}`} tabIndex={-1} style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "rgba(107,45,15,0.08)", borderBottom: "1px solid var(--gold-dark)" }}>
                   {selectedOrg.image_path && (
                     <img
@@ -2213,6 +2264,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     editable={hasPagePermission("organizations", "edit")} api={request}
                     refresh={refreshOrganizations} onView={setSelectedOrgImage} />
                   <CampaignComments collection="organizations" entryId={selectedOrg.id} authors={commentAuthors} />
+                  <Reputation key={selectedOrg.id} organizationId={selectedOrg.id} director={campaign?.is_director} />
                   <h4 style={{ margin: "0 0 0.75rem" }}>{t('organizations.membersSection')}</h4>
                   {allies.filter((a) => a.organization_id === selectedOrg.id).length === 0 ? (
                     <p style={{ margin: 0 }}>{t('organizations.noMembers')}</p>
@@ -2308,7 +2360,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
               {allies.map((ally) => {
                 const org = organizations.find((o) => o.id === ally.organization_id);
                 return (
-                  <li key={ally.id} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                  <li key={ally.id} id={`npc_id-${ally.id}`} tabIndex={-1} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                     {ally.image_path ? (
                       <img
                         src={ally.image_path}
