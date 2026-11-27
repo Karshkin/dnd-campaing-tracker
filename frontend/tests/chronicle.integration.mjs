@@ -78,6 +78,12 @@ try {
   const character = await insert(member, "characters", { name: "Niebla" });
   const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
+  const secondNpc = await insert(director, "allies", { name: "Capitana" });
+  const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
+  const map = await insert(director, "maps", { name: "Costa" });
+  const places = await Promise.all(["Faro viejo", "Embarcadero"].map((title) => insert(director, "points_of_interest", {
+    title, map_id: map.id, latitude: 10, longitude: 10,
+  })));
   const foreignNpc = await insert(other, "allies", { name: "Vigía remoto", alignment: "neutral" });
   const chapter = await insert(director, "chronicle_chapters", { title: "El faro" });
   const foreignChapter = await insert(other, "chronicle_chapters", { title: "Otro faro" });
@@ -89,6 +95,8 @@ try {
   assert.ok((await action(member, "save_session", sessionDraft)).error);
   assert.ok((await action(director, "save_session", { ...sessionDraft, chapter_id: foreignChapter.id })).error);
   assert.ok((await action(director, "save_session", { ...sessionDraft, links: [{ npc_id: foreignNpc.id }] })).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, attendance: [character.id, character.id] })).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, links: [{ npc_id: npc.id }, { npc_id: npc.id }] })).error);
   ok(await action(director, "save_session", sessionDraft));
   const session = ok(await director.from("chronicle_sessions").select().single());
   ok(await director.from("chronicle_sessions").update({
@@ -232,6 +240,15 @@ try {
   await organizationPicker.getByRole("checkbox", { name: secondFaction.name }).focus();
   await page.keyboard.press("Space");
   assert.equal(await organizationPicker.getByText("2 seleccionados", { exact: true }).count(), 1);
+  const otherPickers = [
+    ["PNJ", [npc.name, secondNpc.name]],
+    ["Criaturas", creatures.map(({ name }) => name)],
+    ["Lugares", places.map(({ title }) => title)],
+  ];
+  for (const [name, options] of otherPickers) {
+    const picker = page.getByRole("group", { name, exact: true });
+    for (const option of options) await picker.getByRole("checkbox", { name: option, exact: true }).check();
+  }
   await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
   await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
   await page.reload();
@@ -239,11 +256,14 @@ try {
   await page.getByRole("button", { name: "Editar sesión" }).click();
   assert.equal(await attendancePicker.getByRole("checkbox", { checked: true }).count(), 2);
   assert.equal(await organizationPicker.getByRole("checkbox", { checked: true }).count(), 2);
+  for (const [name] of otherPickers) {
+    assert.equal(await page.getByRole("group", { name, exact: true }).getByRole("checkbox", { checked: true }).count(), 2);
+  }
   await organizationPicker.getByRole("button", { name: `Quitar ${secondFaction.name}` }).click();
   await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
-  await page.getByRole("button", { name: "Editar sesión" }).waitFor();
+  await page.getByRole("button", { name: "Guardar sesión", exact: true }).waitFor({ state: "hidden" });
   const epilogue = ok(await director.from("chronicle_sessions").select("id").eq("title", "Epílogo").single());
-  assert.deepEqual(ok(await director.from("chronicle_links").select("organization_id").eq("session_id", epilogue.id)),
+  assert.deepEqual(ok(await director.from("chronicle_links").select("organization_id").eq("session_id", epilogue.id).not("organization_id", "is", null)),
     [{ organization_id: faction.id }]);
   await page.getByRole("button", { name: "Publicar resumen", exact: true }).click();
   await page.getByText("Al alba", { exact: true }).waitFor();
