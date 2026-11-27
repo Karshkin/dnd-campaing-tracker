@@ -97,6 +97,8 @@
     "createError": "No se pudo crear la entrada del diario."
   },
   "characters": {
+    "allCharacters": "Todos los personajes",
+    "owner": "Jugador: {{name}}",
     "title": "Mis Personajes",
     "namePlaceholder": "Nombre del Personaje",
     "class": "Clase",

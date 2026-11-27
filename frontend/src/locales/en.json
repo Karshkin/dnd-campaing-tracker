@@ -97,6 +97,8 @@
     "createError": "Could not create diary entry."
   },
   "characters": {
+    "allCharacters": "All characters",
+    "owner": "Player: {{name}}",
     "title": "My Characters",
     "namePlaceholder": "Character Name",
     "class": "Class",

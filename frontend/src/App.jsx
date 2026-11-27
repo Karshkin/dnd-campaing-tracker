@@ -347,6 +347,8 @@ function Campaign({ session }) {
   const [characters, refreshCharacters] = useCampaignData("/characters", hasPagePermission("characters"), setOperationError);
   const [selectedCharacterRecord, setSelectedCharacter] = useState(null);
   const selectedCharacter = characters.find((row) => row.id === selectedCharacterRecord?.id) ?? null;
+  const ownsSelectedCharacter = selectedCharacter?.user_id === currentUser?.id;
+  const canEditSelectedCharacter = ownsSelectedCharacter && hasPagePermission("characters", "edit");
   const [characterInventory, setCharacterInventory] = useState([]);
   const [characterDiary, setCharacterDiary] = useState([]);
 
@@ -677,23 +679,25 @@ function Campaign({ session }) {
     }
   };
 
-  // Characters: Load Character Details
+  const characterDetailRequest = useRef(0);
   const loadCharacterDetails = async (character) => {
+    const requestId = ++characterDetailRequest.current;
     setSelectedCharacter(character);
+    setCharacterInventory([]);
+    setCharacterDiary([]);
 
-    // Load inventory
-    const invResponse = await request(`/characters/${character.id}/inventory`, {
-    });
-    if (invResponse.ok) {
-      setCharacterInventory(await invResponse.json());
-    }
-
-    // Load diary
-    const diaryResponse = await request(`/characters/${character.id}/diary`, {
-    });
-    if (diaryResponse.ok) {
-      setCharacterDiary(await diaryResponse.json());
-    }
+    const ownsCharacter = character.user_id === currentUser?.id;
+    const [inventoryResponse, diaryResponse] = await Promise.all([
+      ownsCharacter ? request(`/characters/${character.id}/inventory`) : null,
+      request(`/characters/${character.id}/diary`),
+    ]);
+    const [inventory, diary] = await Promise.all([
+      inventoryResponse?.ok ? inventoryResponse.json() : [],
+      diaryResponse.ok ? diaryResponse.json() : [],
+    ]);
+    if (requestId !== characterDetailRequest.current) return;
+    setCharacterInventory(inventory);
+    setCharacterDiary(diary);
   };
 
   // Character Inventory: Add Item
@@ -1726,7 +1730,7 @@ function Campaign({ session }) {
                 )}
                 {hasPagePermission("characters", "edit") && characterError ? <p className="error">{characterError}</p> : null}
 
-                <h3>{t('characters.yourCharacters')}</h3>
+                <h3>{t(currentUser?.is_admin ? 'characters.allCharacters' : 'characters.yourCharacters')}</h3>
                 <ul>
                   {characters.map((char) => (
                     <li key={char.id} className="row" style={{ alignItems: "center", gap: "0.75rem" }}>
@@ -1743,6 +1747,9 @@ function Campaign({ session }) {
                       )}
                       <span style={{ flexGrow: 1 }}>
                         <strong>{char.name}</strong> - {t('characters.lvl')} {char.level} {char.race} {char.character_class}
+                        {currentUser?.is_admin && char.owner?.username && (
+                          <small> · {t('characters.owner', { name: char.owner.username })}</small>
+                        )}
                         {char.organization_id && organizations.find((o) => o.id === char.organization_id) && (
                           <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>
                             {organizations.find((o) => o.id === char.organization_id).name}
@@ -1758,7 +1765,7 @@ function Campaign({ session }) {
                             <button type="button">{t('characters.sheet')}</button>
                           </a>
                         )}
-                        {hasPagePermission("characters", "edit") && (
+                        {char.user_id === currentUser?.id && hasPagePermission("characters", "edit") && (
                           <button type="button" onClick={() => deleteCharacter(char.id)}>
                             {t('common.delete')}
                           </button>
@@ -1784,7 +1791,7 @@ function Campaign({ session }) {
                           style={{ width: "96px", height: "96px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "3px solid #8b4513" }}
                           title={t('common.clickToView')}
                         />
-                        {hasPagePermission("characters", "edit") && (
+                        {canEditSelectedCharacter && (
                           <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title={t('common.replaceImage')}>
                             {t('common.replace')}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
@@ -1792,7 +1799,7 @@ function Campaign({ session }) {
                         )}
                       </div>
                     ) : (
-                      hasPagePermission("characters", "edit") ? (
+                      canEditSelectedCharacter ? (
                         <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
                           🧙<span>{t('characters.addPortraitShort')}</span>
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
@@ -1806,6 +1813,9 @@ function Campaign({ session }) {
                     <h3 style={{ margin: "0 0 0.25rem" }}>
                       {selectedCharacter.name} - {t('characters.lvl')} {selectedCharacter.level} {selectedCharacter.race} {selectedCharacter.character_class}
                     </h3>
+                    {currentUser?.is_admin && selectedCharacter.owner?.username && (
+                      <p>{t('characters.owner', { name: selectedCharacter.owner.username })}</p>
+                    )}
                     {selectedCharacter.organization_id && organizations.find((o) => o.id === selectedCharacter.organization_id) && (
                       <span style={{ fontSize: "0.85rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "2px 8px", display: "inline-block", marginBottom: "0.5rem" }}>
                         🏰 {organizations.find((o) => o.id === selectedCharacter.organization_id).name}
@@ -1815,7 +1825,7 @@ function Campaign({ session }) {
                   </div>
                 </div>
 
-                {hasPagePermission("characters", "edit") && (
+                {canEditSelectedCharacter && (
                   <>
                     <h4>{t('characters.uploadSheet')}</h4>
                     <input
@@ -1826,48 +1836,52 @@ function Campaign({ session }) {
                   </>
                 )}
 
-                <h4>{t('characters.inventory')}</h4>
-                {hasPagePermission("characters", "edit") && (
-                  <form onSubmit={addInventoryItem} className="form">
-                  <input
-                    value={inventoryDraft.item_name}
-                    onChange={(e) => setInventoryDraft((old) => ({ ...old, item_name: e.target.value }))}
-                    placeholder={t('characters.itemName')}
-                    required
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    value={inventoryDraft.quantity}
-                    onChange={(e) => setInventoryDraft((old) => ({ ...old, quantity: Number(e.target.value) }))}
-                    placeholder={t('resources.quantity')}
-                  />
-                  <input
-                    value={inventoryDraft.description}
-                    onChange={(e) => setInventoryDraft((old) => ({ ...old, description: e.target.value }))}
-                    placeholder={t('common.description')}
-                  />
-                  <button type="submit">{t('characters.addItem')}</button>
-                  </form>
+                {ownsSelectedCharacter && (
+                  <>
+                    <h4>{t('characters.inventory')}</h4>
+                    {canEditSelectedCharacter && (
+                      <form onSubmit={addInventoryItem} className="form">
+                      <input
+                        value={inventoryDraft.item_name}
+                        onChange={(e) => setInventoryDraft((old) => ({ ...old, item_name: e.target.value }))}
+                        placeholder={t('characters.itemName')}
+                        required
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        value={inventoryDraft.quantity}
+                        onChange={(e) => setInventoryDraft((old) => ({ ...old, quantity: Number(e.target.value) }))}
+                        placeholder={t('resources.quantity')}
+                      />
+                      <input
+                        value={inventoryDraft.description}
+                        onChange={(e) => setInventoryDraft((old) => ({ ...old, description: e.target.value }))}
+                        placeholder={t('common.description')}
+                      />
+                      <button type="submit">{t('characters.addItem')}</button>
+                      </form>
+                    )}
+                    <ul>
+                      {characterInventory.map((item) => (
+                        <li key={item.id} className="row">
+                          <span>
+                            <strong>{item.item_name}</strong> x{item.quantity}
+                            {item.description ? ` - ${item.description}` : ""}
+                          </span>
+                          {canEditSelectedCharacter && (
+                            <button type="button" onClick={() => deleteInventoryItem(item.id)}>
+                              {t('common.delete')}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
-                <ul>
-                  {characterInventory.map((item) => (
-                    <li key={item.id} className="row">
-                      <span>
-                        <strong>{item.item_name}</strong> x{item.quantity}
-                        {item.description ? ` - ${item.description}` : ""}
-                      </span>
-                      {hasPagePermission("characters", "edit") && (
-                        <button type="button" onClick={() => deleteInventoryItem(item.id)}>
-                          {t('common.delete')}
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
 
                 <h4>{t('characters.diary')}</h4>
-                {hasPagePermission("characters", "edit") && (
+                {canEditSelectedCharacter && (
                   <form onSubmit={addCharacterDiaryEntry} className="form">
                   <input
                     value={charDiaryDraft.title}
