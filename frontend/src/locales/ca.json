@@ -99,6 +99,8 @@
     "createError": "No s’ha pogut crear l’entrada del diari."
   },
   "entryEditor": {
+    "privacyHelp": "Els camps són visibles per defecte per a qui pot veure aquesta secció. Els camps marcats només els pot veure qui la pot editar.",
+    "privateSummary": "Camps privats: {{fields}}",
     "alignment": "Actitud",
     "organization": "Organització",
     "currentOrganization": "Organització actual",

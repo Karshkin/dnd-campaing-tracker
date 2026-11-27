@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 
 import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
-import { CampaignEntryTools } from "./CampaignEntryEditor";
+import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
@@ -733,7 +733,7 @@ function Campaign({ session }) {
     const form = event.currentTarget;
     const response = await request(`/creatures`, {
       method: "POST",
-      body: creatureDraft,
+      body: { ...creatureDraft, private_fields: creatureDraft.private_fields ?? [] },
     });
     if (response.ok) {
       const created = await response.json();
@@ -769,7 +769,7 @@ function Campaign({ session }) {
     const form = event.currentTarget;
     const response = await request(`/allies`, {
       method: "POST",
-      body: allyDraft,
+      body: { ...allyDraft, private_fields: allyDraft.private_fields ?? [] },
     });
     if (response.ok) {
       const created = await response.json();
@@ -841,7 +841,7 @@ function Campaign({ session }) {
     const form = e.currentTarget;
     const res = await request(`/organizations`, {
       method: "POST",
-      body: orgDraft,
+      body: { ...orgDraft, private_fields: orgDraft.private_fields ?? [] },
     });
     if (res.ok) {
       const created = await res.json();
@@ -1986,6 +1986,7 @@ function Campaign({ session }) {
                     <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setCreatureImageFile(e.target.files[0] || null)} />
                   </label>
                   {creatureImageFile && <small style={{ color: "#5d3a1a" }}>{creatureImageFile.name}</small>}
+                  <EntryPrivacy collection="creatures" draft={creatureDraft} setDraft={setCreatureDraft} />
                   <button type="submit">{t('admin.addCreature')}</button>
                 </form>
                 {creatureError ? <p className="error">{creatureError}</p> : null}
@@ -2083,6 +2084,7 @@ function Campaign({ session }) {
                     🖼️ {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setOrgImageFile(e.target.files[0] || null)} />
                   </label>
+                  <EntryPrivacy collection="organizations" draft={orgDraft} setDraft={setOrgDraft} />
                   <button type="submit">{t('admin.addOrgBtn')}</button>
                 </form>
                 {orgError ? <p className="error">{orgError}</p> : null}
@@ -2246,6 +2248,7 @@ function Campaign({ session }) {
                     🖼️ {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setAllyImageFile(e.target.files[0] || null)} />
                   </label>
+                  <EntryPrivacy collection="allies" draft={allyDraft} setDraft={setAllyDraft} />
                   <button type="submit">{t('admin.addNPCBtn')}</button>
                 </form>
                 {allyError ? <p className="error">{allyError}</p> : null}

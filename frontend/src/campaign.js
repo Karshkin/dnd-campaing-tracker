@@ -255,7 +255,9 @@ async function dispatch(path, method, body) {
   if (method === "GET") {
     const query = collection === "characters" && !nested
       ? source.select("*,owner:profiles(username),private:character_private_fields(fields)")
-      : source.select();
+      : !nested && ["creatures", "allies", "organizations"].includes(collection)
+        ? source.select("*,private:campaign_entry_private_fields(fields)")
+        : source.select();
     if (nested) query.eq(parent, id);
     if (collection === "maps" && !nested) query.eq("is_active", true);
     if (collection === "events" && params.has("map_id")) query.eq("map_id", params.get("map_id"));
@@ -269,7 +271,19 @@ async function dispatch(path, method, body) {
           : { ...row, sheet_file_path: null };
       });
     }
+    if (!nested && ["creatures", "allies", "organizations"].includes(collection)) {
+      return listRows(query, order, ascending, ({ private: privateRow, ...row }) => ({
+        ...row, ...privateRow?.fields, private_fields: Object.keys(privateRow?.fields ?? {}),
+      }));
+    }
     return listRows(query, order, ascending);
+  }
+
+  if (["creatures", "allies", "organizations"].includes(collection) && !action
+      && ["POST", "PUT"].includes(method) && Array.isArray(body?.private_fields)) {
+    return value(supabase.rpc("save_campaign_entry", {
+      collection, target_id: id ? Number(id) : null, draft: body,
+    }));
   }
 
   if (collection === "characters" && !action && ["POST", "PUT"].includes(method)

@@ -99,6 +99,8 @@
     "createError": "Could not create diary entry."
   },
   "entryEditor": {
+    "privacyHelp": "Fields are visible by default to people who can view this section. Marked fields are visible only to people who can edit it.",
+    "privateSummary": "Private fields: {{fields}}",
     "alignment": "Attitude",
     "organization": "Organization",
     "currentOrganization": "Current organization",
