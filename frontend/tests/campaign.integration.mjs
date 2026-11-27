@@ -96,6 +96,38 @@ try {
   assert.ok((await outsider.from("resources").select()).error);
 
   const character = await request(api, "/characters", "POST", { name: `Adventurer ${run}` });
+  assert.equal(character.emoji, "");
+  const profilePath = `/characters/${character.id}`;
+  await request(api, profilePath, "PUT", { emoji: "🐉", background: "From the mountains", equipment: "Longbow" });
+  const expanded = (await request(api, "/characters")).find((row) => row.id === character.id);
+  assert.equal(expanded.emoji, "🐉");
+  assert.equal(expanded.background, "From the mountains");
+  assert.equal(expanded.equipment, "Longbow");
+  const companion = ok(await second.rpc("list_character_companions").eq("id", character.id).single());
+  assert.equal(companion.name, character.name);
+  assert.equal(companion.emoji, "🐉");
+  assert.equal(companion.owner_name, `Player ${run}`);
+  assert.equal(companion.equipment, undefined);
+  assert.ok((await outsider.rpc("list_character_companions")).error);
+
+  const galleryPath = `${profilePath}/gallery`;
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==", "base64");
+  const image = await request(api, galleryPath, "POST", new File([png], "portrait.png", { type: "image/png" }));
+  const galleryRow = ok(await supabase.from("character_gallery").select("object_path").eq("id", image.id).single());
+  cleanup.push(() => admin.storage.from("character-gallery").remove([galleryRow.object_path]));
+  const gallery = await request(api, galleryPath);
+  assert.equal(gallery.length, 1);
+  assert.equal((await fetch(gallery[0].url)).status, 200);
+  assert.deepEqual(ok(await second.from("character_gallery").select().eq("id", image.id)), []);
+  assert.ok((await second.storage.from("character-gallery").createSignedUrl(galleryRow.object_path, 60)).error);
+  assert.equal(ok(await dmClient.from("character_gallery").select("id").eq("id", image.id).single()).id, image.id);
+  const dmImage = ok(await dmClient.storage.from("character-gallery").createSignedUrl(galleryRow.object_path, 60));
+  assert.equal((await fetch(dmImage.signedUrl)).status, 200);
+  assert.deepEqual(ok(await dmClient.from("character_gallery").delete().eq("id", image.id).select()), []);
+  await request(api, `${galleryPath}/${image.id}`, "DELETE");
+  assert.deepEqual(await request(api, galleryPath), []);
+  assert.ok((await admin.storage.from("character-gallery").download(galleryRow.object_path)).error);
+
   const itemPath = `/characters/${character.id}/inventory`;
   const diaryPath = `/characters/${character.id}/diary`;
   const item = await request(api, itemPath, "POST", { item_name: "Rope" });
