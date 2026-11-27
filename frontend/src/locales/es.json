@@ -96,6 +96,27 @@
     "add": "Añadir Entrada",
     "createError": "No se pudo crear la entrada del diario."
   },
+  "characterSheet": {
+    "companions": "Compañeros de campaña",
+    "noCompanions": "Todavía no hay compañeros en la campaña.",
+    "title": "Ficha del personaje",
+    "edit": "Editar ficha",
+    "optionalDetails": "Detalles opcionales",
+    "emoji": "Emoji",
+    "defaultEmoji": "Predeterminado",
+    "background": "Trasfondo",
+    "equipment": "Equipo",
+    "abilities": "Habilidades y poderes",
+    "appearance": "Aspecto",
+    "personality": "Personalidad",
+    "goals": "Motivaciones y objetivos",
+    "empty": "Aún no hay detalles en la ficha.",
+    "gallery": "Galería",
+    "addImages": "Añadir imágenes (hasta 20 MB por imagen)",
+    "noImages": "Aún no hay imágenes.",
+    "image": "Imagen del personaje {{number}}",
+    "confirmRemoveImage": "¿Eliminar esta imagen de la galería?"
+  },
   "characters": {
     "allCharacters": "Todos los personajes",
     "owner": "Jugador: {{name}}",

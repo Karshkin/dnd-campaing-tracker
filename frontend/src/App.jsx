@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
+import { CharacterGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
 const PERMISSION_RANK = { none: 0, view: 1, edit: 2, admin: 3 };
 
 const emptyCollection = [];
+const blankCharacter = () => ({
+  name: "", character_class: "", level: 1, race: "", notes: "", organization_id: null, ...sheetDraft(),
+});
 
 function useCampaignData(path, enabled, onError) {
   const [data, setData] = useState(emptyCollection);
@@ -345,6 +349,8 @@ function Campaign({ session }) {
 
   // User-specific data
   const [characters, refreshCharacters] = useCampaignData("/characters", hasPagePermission("characters"), setOperationError);
+  const [companions] = useCampaignData("/character-companions",
+    hasPagePermission("characters") && !currentUser?.is_admin, setOperationError);
   const [selectedCharacterRecord, setSelectedCharacter] = useState(null);
   const selectedCharacter = characters.find((row) => row.id === selectedCharacterRecord?.id) ?? null;
   const ownsSelectedCharacter = selectedCharacter?.user_id === currentUser?.id;
@@ -360,7 +366,7 @@ function Campaign({ session }) {
   const [diaryDraft, setDiaryDraft] = useState({ title: "", content: "" });
   const [diaryImageFile, setDiaryImageFile] = useState(null);
   const [selectedDiaryImage, setSelectedDiaryImage] = useState(null);
-  const [characterDraft, setCharacterDraft] = useState({ name: "", character_class: "", level: 1, race: "", notes: "", organization_id: null });
+  const [characterDraft, setCharacterDraft] = useState(blankCharacter);
   const [characterImageFile, setCharacterImageFile] = useState(null);
   const [selectedCharacterImage, setSelectedCharacterImage] = useState(null);
   const [creatureDraft, setCreatureDraft] = useState({ name: "", creature_type: "", challenge_rating: "", armor_class: 0, hit_points: "", speed: "", abilities: "", weaknesses: "", resistances: "", immunities: "", notes: "" });
@@ -632,11 +638,17 @@ function Campaign({ session }) {
         setCharacterImageFile(null);
       }
       setCharacterError("");
-      setCharacterDraft({ name: "", character_class: "", level: 1, race: "", notes: "", organization_id: null });
+      setCharacterDraft(blankCharacter());
       refreshCharacters();
       return;
     }
     setCharacterError(await readErrorMessage(response, t('characters.createError')));
+  };
+
+  const saveCharacterSheet = async (characterId, draft) => {
+    const result = await request(`/characters/${characterId}`, { method: "PUT", body: draft });
+    if (result.ok) await refreshCharacters();
+    return result.ok;
   };
 
   const uploadCharacterImage = async (characterId, file) => {
@@ -1725,6 +1737,11 @@ function Campaign({ session }) {
                     🖼️ {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
                   </label>
+                  <details className="character-sheet-panel">
+                    <summary>{t("characterSheet.optionalDetails")}</summary>
+                    <SheetFields draft={characterDraft}
+                      onChange={(field, value) => setCharacterDraft((current) => ({ ...current, [field]: value }))} />
+                  </details>
                   <button type="submit">{t('characters.create')}</button>
                   </form>
                 )}
@@ -1743,9 +1760,10 @@ function Campaign({ session }) {
                           title={t('common.clickToView')}
                         />
                       ) : (
-                        <span style={{ fontSize: "2rem", flexShrink: 0 }}>🧙</span>
+                        <span style={{ fontSize: "2rem", flexShrink: 0 }}>{char.emoji || defaultCharacterEmoji}</span>
                       )}
                       <span style={{ flexGrow: 1 }}>
+                        {char.image_path && char.emoji && <span aria-hidden="true">{char.emoji} </span>}
                         <strong>{char.name}</strong> - {t('characters.lvl')} {char.level} {char.race} {char.character_class}
                         {currentUser?.is_admin && char.owner?.username && (
                           <small> · {t('characters.owner', { name: char.owner.username })}</small>
@@ -1774,13 +1792,34 @@ function Campaign({ session }) {
                     </li>
                   ))}
                 </ul>
+                {!currentUser?.is_admin && (
+                  <section className="character-sheet-panel">
+                    <div className="character-section-heading">
+                      <h4>{t("characterSheet.companions")}</h4>
+                    </div>
+                    {companions.length ? (
+                      <ul className="character-companion-grid">
+                        {companions.map((companion) => (
+                          <li key={companion.id}>
+                            <span className="character-companion-emoji" aria-hidden="true">{companion.emoji || defaultCharacterEmoji}</span>
+                            <div>
+                              <strong>{companion.name}</strong>
+                              <span>{[companion.race, companion.character_class, `${t("characters.lvl")} ${companion.level}`].filter(Boolean).join(" · ")}</span>
+                              <small>{t("characters.owner", { name: companion.owner_name })}</small>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="character-sheet-empty">{t("characterSheet.noCompanions")}</p>}
+                  </section>
+                )}
               </>
             ) : (
               <>
                 <button type="button" onClick={() => setSelectedCharacter(null)}>
                   {t('characters.back')}
                 </button>
-                <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start", marginBottom: "1rem" }}>
+                <div className="character-profile-header">
                   <div style={{ flexShrink: 0 }}>
                     {selectedCharacter.image_path ? (
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
@@ -1801,16 +1840,18 @@ function Campaign({ session }) {
                     ) : (
                       canEditSelectedCharacter ? (
                         <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
-                          🧙<span>{t('characters.addPortraitShort')}</span>
+                          <span className="character-profile-emoji">{selectedCharacter.emoji || defaultCharacterEmoji}</span>
+                          <span>{t('characters.addPortraitShort')}</span>
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
                         </label>
                       ) : (
-                        <span style={{ width: "96px", height: "96px", borderRadius: "50%", border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem" }}>🧙</span>
+                        <span style={{ width: "96px", height: "96px", borderRadius: "50%", border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem" }}>{selectedCharacter.emoji || defaultCharacterEmoji}</span>
                       )
                     )}
                   </div>
                   <div>
                     <h3 style={{ margin: "0 0 0.25rem" }}>
+                      {selectedCharacter.image_path && selectedCharacter.emoji && <span aria-hidden="true">{selectedCharacter.emoji} </span>}
                       {selectedCharacter.name} - {t('characters.lvl')} {selectedCharacter.level} {selectedCharacter.race} {selectedCharacter.character_class}
                     </h3>
                     {currentUser?.is_admin && selectedCharacter.owner?.username && (
@@ -1825,19 +1866,27 @@ function Campaign({ session }) {
                   </div>
                 </div>
 
+                <CharacterSheet key={selectedCharacter.id} character={selectedCharacter} editable={canEditSelectedCharacter}
+                  onSave={(draft) => saveCharacterSheet(selectedCharacter.id, draft)} />
+
+                {(ownsSelectedCharacter || currentUser?.is_admin) && (
+                  <CharacterGallery key={selectedCharacter.id} characterId={selectedCharacter.id}
+                    editable={canEditSelectedCharacter} api={request} onView={setSelectedCharacterImage} />
+                )}
+
                 {canEditSelectedCharacter && (
-                  <>
+                  <section className="character-sheet-panel">
                     <h4>{t('characters.uploadSheet')}</h4>
                     <input
                       type="file"
                       accept=".pdf,.png,.jpg,.jpeg"
                       onChange={(e) => e.target.files[0] && uploadCharacterSheet(selectedCharacter.id, e.target.files[0])}
                     />
-                  </>
+                  </section>
                 )}
 
                 {ownsSelectedCharacter && (
-                  <>
+                  <section className="character-sheet-panel">
                     <h4>{t('characters.inventory')}</h4>
                     {canEditSelectedCharacter && (
                       <form onSubmit={addInventoryItem} className="form">
@@ -1877,9 +1926,10 @@ function Campaign({ session }) {
                         </li>
                       ))}
                     </ul>
-                  </>
+                  </section>
                 )}
 
+                <section className="character-sheet-panel">
                 <h4>{t('characters.diary')}</h4>
                 {canEditSelectedCharacter && (
                   <form onSubmit={addCharacterDiaryEntry} className="form">
@@ -1908,6 +1958,7 @@ function Campaign({ session }) {
                     </li>
                   ))}
                 </ul>
+                </section>
               </>
             )}
           </article>

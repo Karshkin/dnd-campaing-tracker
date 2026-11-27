@@ -96,6 +96,27 @@
     "add": "Add Entry",
     "createError": "Could not create diary entry."
   },
+  "characterSheet": {
+    "companions": "Campaign companions",
+    "noCompanions": "There are no companions in the campaign yet.",
+    "title": "Character sheet",
+    "edit": "Edit sheet",
+    "optionalDetails": "Optional details",
+    "emoji": "Emoji",
+    "defaultEmoji": "Default",
+    "background": "Background",
+    "equipment": "Equipment",
+    "abilities": "Abilities and powers",
+    "appearance": "Appearance",
+    "personality": "Personality",
+    "goals": "Motivations and goals",
+    "empty": "The character sheet has no details yet.",
+    "gallery": "Gallery",
+    "addImages": "Add images (up to 20 MB each)",
+    "noImages": "There are no images yet.",
+    "image": "Character image {{number}}",
+    "confirmRemoveImage": "Remove this image from the gallery?"
+  },
   "characters": {
     "allCharacters": "All characters",
     "owner": "Player: {{name}}",

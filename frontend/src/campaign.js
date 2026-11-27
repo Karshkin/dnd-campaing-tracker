@@ -88,15 +88,16 @@ function fileExtension(file, field) {
   if (!extension || (extension === "pdf" && field !== "sheet_file_path")) {
     throw new Error("Unsupported file type");
   }
-  if (!file.size || file.size > 50 * 1024 * 1024) {
-    throw new Error("File must be between 1 byte and 50 MB");
+  const limit = field === "gallery" ? 20 : 50;
+  if (!file.size || file.size > limit * 1024 * 1024) {
+    throw new Error(`File must be between 1 byte and ${limit} MB`);
   }
   return extension;
 }
 
-async function removeFiles(paths) {
+async function removeFiles(paths, storage = bucket()) {
   if (paths.length) {
-    const { error } = await bucket().remove(paths);
+    const { error } = await storage.remove(paths);
     if (error) console.error(error);
   }
 }
@@ -141,11 +142,64 @@ async function createMap(form) {
   }
 }
 
+function galleryBucket() {
+  return supabase.storage.from("character-gallery");
+}
+
+async function galleryRows(characterId) {
+  const rows = [];
+  const size = 1000;
+  for (let offset = 0; ; offset += size) {
+    const page = await value(supabase.from("character_gallery").select("id,object_path")
+      .eq("character_id", characterId).order("id", { ascending: false }).range(offset, offset + size - 1));
+    rows.push(...page);
+    if (page.length < size) return rows;
+  }
+}
+
+async function characterGallery(characterId, imageId, method, file) {
+  const storage = galleryBucket();
+  const gallery = supabase.from("character_gallery");
+
+  if (method === "GET") {
+    const rows = await galleryRows(characterId);
+    const images = [];
+    for (let offset = 0; offset < rows.length; offset += 100) {
+      const batch = rows.slice(offset, offset + 100);
+      const signed = await value(storage.createSignedUrls(batch.map((row) => row.object_path), 900));
+      const urls = new Map(signed.map((entry) => [entry.path, entry.signedUrl]));
+      images.push(...batch.map((row) => ({ id: row.id, url: urls.get(row.object_path) })));
+    }
+    return images;
+  }
+
+  if (method === "DELETE") {
+    const row = await value(gallery.delete().eq("id", imageId).eq("character_id", characterId)
+      .select("object_path").single());
+    await removeFiles([row.object_path], storage);
+    return;
+  }
+
+  const extension = fileExtension(file, "gallery");
+  const { session } = await value(supabase.auth.getSession());
+  if (!session) throw new Error("Authentication required");
+  const objectPath = `${session.user.id}/${characterId}/${crypto.randomUUID()}.${extension}`;
+  await value(storage.upload(objectPath, file));
+  try {
+    return await value(gallery.insert({ character_id: Number(characterId), object_path: objectPath }).select("id").single());
+  } catch (error) {
+    await removeFiles([objectPath], storage);
+    throw error;
+  }
+}
+
 async function deleteRecord(table, id) {
   const poiFiles = table === "maps"
     ? await value(supabase.from("points_of_interest").select("image_path").eq("map_id", id))
     : [];
+  const gallery = table === "characters" ? await galleryRows(id) : [];
   const row = await value(supabase.from(table).delete().eq("id", id).select().single());
+  await removeFiles(gallery.map((image) => image.object_path), galleryBucket());
   await removeFiles([...mediaFields.map((field) => row[field]), ...poiFiles.map((poi) => poi.image_path)].filter(Boolean));
 }
 
@@ -165,6 +219,12 @@ async function listRows(query, order, ascending, transform = (row) => row) {
 async function dispatch(path, method, body) {
   const location = new URL(path, "https://campaign.invalid");
   const [collection, id, action, key] = location.pathname.slice(1).split("/");
+  if (collection === "character-companions" && method === "GET") {
+    return listRows(supabase.rpc("list_character_companions"), "name", true);
+  }
+  if (collection === "characters" && action === "gallery") {
+    return characterGallery(id, key, method, body);
+  }
   const params = location.searchParams;
 
   if (collection === "users") {
@@ -198,7 +258,7 @@ async function dispatch(path, method, body) {
       const ownId = session?.user.id;
       return listRows(query, order, ascending, (row) => row.user_id === ownId
         ? row
-        : { ...row, image_path: null, sheet_file_path: null });
+        : { ...row, sheet_file_path: null });
     }
     return listRows(query, order, ascending);
   }
