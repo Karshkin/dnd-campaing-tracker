@@ -1,7 +1,7 @@
 # Migración a Supabase y publicación en GitHub Pages
 
 Proyecto previsto: `mldgsloebfpxciozyyyo`. La aplicación usa Auth, PostgreSQL 17,
-Storage privado y una Edge Function para la administración de cuentas. Usa Node.js 24 para
+Storage privado y permisos por campaña. Usa Node.js 24 para
 compilar y una versión reciente de la CLI de Supabase para desplegar.
 
 ## 1. Preparar Supabase
@@ -15,34 +15,18 @@ compilar y una versión reciente de la CLI de Supabase para desplegar.
    `https://karshkin.github.io/dnd-campaing-tracker/` como **Site URL** y como destino
    permitido. Para registrar cuentas desde el frontend, habilita el registro y la confirmación
    de correo. Comprueba SMTP y los límites de correo del proyecto antes de invitar a los jugadores.
-   La creación desde el panel confirma la cuenta al provisionarla. Entrega sus credenciales
-   iniciales directamente a la persona destinataria.
-4. Despliega `supabase functions deploy manage-users --project-ref mldgsloebfpxciozyyyo`.
-   La configuración de la función desactiva la verificación JWT del gateway. La función valida
-   el token con Supabase Auth y consulta los permisos vigentes en PostgreSQL antes de cada
-   operación. Usa los secretos estándar `SUPABASE_URL`, `SUPABASE_ANON_KEY` y
-   `SUPABASE_SERVICE_ROLE_KEY` en el entorno de la función. Las credenciales del servidor se
-   mantienen en Supabase.
 
-### Crear el primer administrador
+### Campañas y directores
 
-Registra una cuenta con el correo del responsable o créala en **Authentication → Users**.
-Si la creas desde el panel de Supabase, el perfil se inicia con un nombre temporal. Comprueba
-la identidad de la cuenta y copia el UUID que muestra Auth. Ejecuta en el editor SQL con
-el rol administrador y verifica que haya devuelto exactamente el perfil esperado.
+En una instalación nueva, registra una cuenta con correo y contraseña e inicia sesión.
+Pulsa **Crear campaña** para obtener acceso como director de esa campaña. En **Admin**
+puedes añadir cuentas existentes por nombre de usuario y ajustar sus permisos en esa
+campaña. El director también puede configurar el nombre, la descripción, el tema, el
+color de acento, la portada y el emblema. Las imágenes admiten hasta 10 MB por archivo.
 
-```sql
-update public.profiles
-set username = 'Nombre visible del responsable', is_admin = true
-where id = '<UUID verificado en Authentication → Users>'::uuid
-returning id, username, is_admin;
-```
-
-Inicia sesión con el correo y abre `/#/admin` desde la aplicación. Los permisos de sección
-`none`, `view`, `edit` y `admin` se gestionan allí. Un administrador de la sección de
-administración puede gestionar jugadores y sus permisos. Solo un administrador global puede
-cambiar la contraseña de otro administrador global. Un administrador global también puede consultar los personajes y diarios de todos
-los jugadores en la sección de personajes. También puede ver sus retratos y galerías.
+Un administrador de sección gestiona los miembros y permisos de esa misma campaña.
+El director puede consultar los personajes y diarios de sus jugadores, además de
+los retratos y galerías. Los campos privados solo se muestran al propietario.
 Los propietarios editan las fichas y las imágenes. El inventario y los archivos de ficha
 siguen reservados a sus propietarios. Los jugadores con acceso a Personajes ven una
 lista de compañeros con su nombre, emoji, raza, clase, nivel y propietario. La sección
@@ -55,9 +39,29 @@ sus propias aportaciones. Las aportaciones quedan en el grupo cuando un miembro 
 en mapas, personajes, criaturas, PNJ y organizaciones los puede leer quien tenga
 permiso para ver la sección. Solo se puede firmar con un personaje propio.
 
+### Actualizar la instalación de Tiranía de los dragones
+
+La migración de aislamiento conserva los IDs y las rutas de archivos, incorpora las
+cuentas y roles existentes a **Tiranía de los dragones** y fija la campaña en los
+registros anteriores. Las altas posteriores deben crear una campaña o ser añadidas por
+uno de sus administradores. La app envía el identificador de la campaña seleccionada
+con las peticiones de datos, y PostgreSQL comprueba pertenencia, permisos y relaciones.
+
+Para el corte de producción, prueba estas dos migraciones primero contra una copia
+desechable del esquema y de los datos, con clientes de dos campañas en PostgREST y
+Storage. El workflow de Pages publica el frontend al fusionar. Coordina una ventana
+de mantenimiento para hacer una copia de la base de datos y de Storage, aplicar las
+migraciones de aislamiento y de Storage juntas, desplegar la versión retirada de
+`manage-users` y publicar el frontend inmediatamente después. La interfaz anterior
+deja de poder cargar su perfil al cambiar los permisos de la tabla. Comprueba el
+acceso de las cuentas existentes y realiza una prueba de lectura y subida de imágenes
+en dos campañas. Si hay que revertir, restaura juntos el esquema, la función y el
+frontend anterior. La recuperación de contraseñas corresponde a la cuenta de Auth.
+
 ## 2. Importar una campaña existente, si la hay
 
-La migración prepara un esquema vacío. Para trasladar datos reales hacen falta una copia
+El exportador de SQLite se ejecuta sobre el esquema anterior a multicampaña, antes
+de las dos migraciones de aislamiento. Para trasladar datos reales hacen falta una copia
 de `campaign.db`, el árbol `uploads/` y la correspondencia de jugadores y correos. En una
 copia privada de SQLite ejecuta primero las 14 migraciones de FastAPI. Mantén el backend anterior
 disponible y detén las escrituras durante la última copia para evitar perder cambios.

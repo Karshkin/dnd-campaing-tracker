@@ -2,7 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-export const supabase = url && key ? createClient(url, key) : null;
+export const selectedCampaignId = new URLSearchParams(globalThis.location?.search).get("campaign");
+export const supabase = url && key ? createClient(url, key, {
+  global: {
+    fetch(input, options) {
+      const requestUrl = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+      if (!selectedCampaignId || !requestUrl.startsWith(`${url.replace(/\/$/, "")}/rest/v1/`)) {
+        return fetch(input, options);
+      }
+      const headers = new Headers(options?.headers ?? (input instanceof Request ? input.headers : undefined));
+      headers.set("x-campaign-id", selectedCampaignId);
+      return fetch(input, { ...options, headers });
+    },
+  },
+}) : null;
 
 const collections = {
   maps: ["maps", "created_at", false],
@@ -55,40 +68,69 @@ async function signMedia(rows) {
   }));
 }
 
-function withPermissions(user) {
-  return {
-    ...user,
-    permissions: user.permissions.map((entry) => user.is_admin
-      ? { ...entry, permission_level: "admin" }
-      : entry),
-  };
+function campaignAction(action, payload = {}) {
+  return value(supabase.rpc("manage_campaign", { action, payload }));
 }
 
-const profileColumns = "id,username,is_admin,permissions:page_permissions(page_key,permission_level)";
-
-export async function readProfile(userId) {
-  const profile = await value(supabase.from("profiles").select(profileColumns).eq("id", userId).single());
-  return withPermissions(profile);
+export function readProfile() {
+  return campaignAction("self");
 }
 
-async function manageUser(payload) {
-  const { data, error } = await supabase.functions.invoke("manage-users", { body: payload });
-  if (error) {
-    let detail;
-    if (error.context instanceof Response) {
-      detail = (await error.context.json().catch(() => null))?.detail;
+export const campaignSettings = {
+  async list(userId) {
+    const campaigns = await pagedRows(supabase.from("campaign_members")
+      .select("is_director,campaign:campaigns(*)").eq("user_id", userId).order("campaign_id"));
+    return campaigns.map(({ campaign, is_director }) => ({ ...campaign, is_director }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  },
+  create(name) {
+    return campaignAction("create", { name });
+  },
+  async images(campaign) {
+    const objects = [campaign.cover_path, campaign.emblem_path].filter(Boolean);
+    if (!objects.length) return {};
+    const urls = await value(supabase.storage.from("campaign-art").createSignedUrls(objects, 900));
+    return Object.fromEntries(urls.map((entry) => [entry.path, entry.signedUrl]));
+  },
+  async save(campaign, changes, artwork) {
+    const storage = supabase.storage.from("campaign-art");
+    const staged = [];
+    try {
+      for (const kind of ["cover", "emblem"]) {
+        const file = artwork[kind];
+        if (file === undefined) continue;
+        if (file === null) {
+          changes[`${kind}_path`] = null;
+          continue;
+        }
+        const extension = fileExtension(file, kind);
+        const path = `${campaign.id}/${kind}/${crypto.randomUUID()}.${extension}`;
+        await value(storage.upload(path, file));
+        staged.push(path);
+        changes[`${kind}_path`] = path;
+      }
+      const query = supabase.from("campaigns").update(changes).eq("id", campaign.id);
+      const fields = ["cover_path", "emblem_path"].filter((field) => Object.hasOwn(changes, field));
+      for (const field of fields) {
+        if (campaign[field] === null) query.is(field, null);
+        else query.eq(field, campaign[field]);
+      }
+      const saved = await value(query.select().single());
+      await removeFiles(fields.map((field) => campaign[field]).filter(Boolean), storage);
+      return { ...saved, is_director: campaign.is_director };
+    } catch (error) {
+      await removeFiles(staged, storage);
+      throw error;
     }
-    throw new Error(detail || error.message);
-  }
-  return data;
-}
+  },
+};
 
 function fileExtension(file, field) {
   const extension = extensions[file?.type];
   if (!extension || (extension === "pdf" && field !== "sheet_file_path")) {
     throw new Error("Unsupported file type");
   }
-  const limit = field === "gallery" ? 20 : 50;
+  const limit = field === "gallery" ? 20 : ["cover", "emblem"].includes(field) ? 10 : 50;
   if (!file.size || file.size > limit * 1024 * 1024) {
     throw new Error(`File must be between 1 byte and ${limit} MB`);
   }
@@ -234,15 +276,12 @@ async function dispatch(path, method, body) {
   const params = location.searchParams;
 
   if (collection === "users") {
-    if (method === "GET") {
-      const users = await value(supabase.from("profiles").select(profileColumns).order("created_at"));
-      return users.map(withPermissions);
-    }
+    if (method === "GET") return campaignAction("roster");
+    if (method === "POST") return campaignAction("invite", body);
+    if (method === "DELETE") return campaignAction("remove", { userId: id });
     if (action === "permissions") {
-      return value(supabase.from("page_permissions").update(body)
-        .eq("user_id", id).eq("page_key", key).select().single());
+      return campaignAction("permission", { ...body, userId: id, pageKey: key });
     }
-    return manageUser(id ? { action: "reset", userId: id, ...body } : { action: "create", ...body });
   }
 
   const nested = (collection === "characters" && ["inventory", "diary"].includes(action))
@@ -254,9 +293,9 @@ async function dispatch(path, method, body) {
 
   if (method === "GET") {
     const query = collection === "characters" && !nested
-      ? source.select("*,owner:profiles(username),private:character_private_fields(fields)")
+      ? source.select("*,owner:profiles(username),private:character_private_fields!character_private_fields_character_id_fkey(fields)")
       : !nested && ["creatures", "allies", "organizations"].includes(collection)
-        ? source.select("*,private:campaign_entry_private_fields(fields)")
+        ? source.select(`*,private:campaign_entry_private_fields!campaign_entry_private_fields_${galleryConfigs[collection].parent}_fkey(fields)`)
         : source.select();
     if (nested) query.eq(parent, id);
     if (collection === "maps" && !nested) query.eq("is_active", true);

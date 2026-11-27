@@ -5,6 +5,7 @@ import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheet
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
+import { CampaignAppearance, CampaignSelector, CampaignWorkspace } from "./CampaignWorkspace";
 import { campaignRequest, readProfile, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
 const PERMISSION_OPTIONS = ["none", "view", "edit", "admin"];
@@ -267,10 +268,15 @@ function App() {
 
   if (!supabase) return <main><p className="error">{t("auth.configurationMissing")}</p></main>;
   if (session === undefined) return <main><p role="status">{t("auth.loadingSession")}</p></main>;
-  return <Campaign key={session?.user.id ?? "guest"} session={session} />;
+  if (!session) return <Campaign key="guest" session={null} />;
+  return (
+    <CampaignWorkspace key={session.user.id} userId={session.user.id}>
+      {(workspace) => <Campaign key={workspace.campaign.id} session={session} {...workspace} />}
+    </CampaignWorkspace>
+  );
 }
 
-function Campaign({ session }) {
+function Campaign({ session, campaign, campaigns = [], images = {}, onSaved }) {
   const [activeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
     ? "tracker"
     : parseView());
@@ -355,9 +361,8 @@ function Campaign({ session }) {
 
   // Admin: users list
   const [users, setUsers] = useState([]);
-  const [newUserData, setNewUserData] = useState({ username: "", email: "", password: "" });
+  const [inviteName, setInviteName] = useState("");
   const [userManagementError, setUserManagementError] = useState("");
-  const [passwordResetDrafts, setPasswordResetDrafts] = useState({});
 
   // User-specific data
   const [characters, refreshCharacters] = useCampaignData("/characters", hasPagePermission("characters"), setOperationError);
@@ -415,8 +420,12 @@ function Campaign({ session }) {
     const refreshProfile = async () => {
       const requestVersion = ++version;
       try {
-        const profile = await readProfile(userId);
+        const profile = await readProfile();
         if (!mounted || requestVersion !== version) return;
+        if (!profile) {
+          window.location.reload();
+          return;
+        }
         setCurrentUser(profile);
         setPagePermissions(Object.fromEntries(
           profile.permissions.map(({ page_key, permission_level }) => [page_key, permission_level]),
@@ -1064,20 +1073,20 @@ function Campaign({ session }) {
     setUserManagementError(await readErrorMessage(response, t('admin.loadUsersError')));
   };
 
-  const createUser = async (event) => {
+  const inviteMember = async (event) => {
     event.preventDefault();
     setUserManagementError("");
     const response = await request(`/users`, {
       method: "POST",
-      body: newUserData,
+      body: { username: inviteName.trim() },
     });
 
     if (response.ok) {
-      setNewUserData({ username: "", email: "", password: "" });
+      setInviteName("");
       loadUsers();
       return;
     }
-    setUserManagementError(await readErrorMessage(response, t('admin.createUserError')));
+    setUserManagementError(await readErrorMessage(response, t("campaigns.inviteError")));
   };
 
   const updatePermission = async (userId, pageKey, permissionLevel) => {
@@ -1111,32 +1120,26 @@ function Campaign({ session }) {
     setUserManagementError(await readErrorMessage(response, t('admin.updatePermissionError')));
   };
 
-  const resetUserPassword = async (userId) => {
-    const password = passwordResetDrafts[userId] ?? "";
-    if (!password) {
-      return;
-    }
-
-    const response = await request(`/users/${userId}/password`, {
-      method: "PUT",
-      body: { password },
-    });
-
-    if (response.ok) {
-      setPasswordResetDrafts((drafts) => ({ ...drafts, [userId]: "" }));
-      return;
-    }
-
-    setUserManagementError(await readErrorMessage(response, t('admin.resetPasswordError')));
+  const removeMember = async (id) => {
+    if (!window.confirm(t("campaigns.removeConfirm"))) return;
+    setUserManagementError("");
+    const response = await request(`/users/${id}`, { method: "DELETE" });
+    if (response.ok) await loadUsers();
+    else setUserManagementError(await readErrorMessage(response, t("campaigns.removeError")));
   };
 
   return (
-    <main>
-      <header>
+    <main className="campaign-theme" data-theme={campaign?.theme} style={{ "--campaign-accent": campaign?.accent }}>
+      <header className={campaign ? "campaign-header" : undefined}>
+        {campaign && images[campaign.cover_path] && <img className="campaign-cover" src={images[campaign.cover_path]} alt="" />}
         <div className="campaign-brand">
-          <img className="campaign-logo" src={`${import.meta.env.BASE_URL}d20.png`} width="64" height="64" alt="" />
-          <h1>{t('app.title')}<span>{t('app.subtitle')}</span></h1>
+          <img className="campaign-logo" src={images[campaign?.emblem_path] || `${import.meta.env.BASE_URL}d20.png`} width="64" height="64" alt="" />
+          <div>
+            <h1>{campaign?.name || t("app.title")}<span>{t("app.subtitle")}</span></h1>
+            {campaign?.description && <p className="campaign-description">{campaign.description}</p>}
+          </div>
         </div>
+        {campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} />}
         <div className="tabs">
           <LanguagePicker />
           {(!isAuthenticated || hasPagePermission("tracker", "view") || canManageAdmin) && (
@@ -2358,30 +2361,17 @@ function Campaign({ session }) {
       {/* ADMIN VIEW (/admin) */}
       {activeView === "admin" && isAuthenticated && hasPagePermission("admin", "admin") ? (
         <section className="grid">
+          {currentUser?.is_admin && campaign && (
+            <CampaignAppearance campaign={campaign} images={images} onSaved={onSaved} />
+          )}
           <article className="card wide">
             <h2>{t('admin.userManagement')}</h2>
-            <form onSubmit={createUser} className="form">
-              <input
-                value={newUserData.username}
-                onChange={(event) => setNewUserData((old) => ({ ...old, username: event.target.value }))}
-                placeholder={t('auth.usernamePlaceholder')}
-                required
-              />
-              <input
-                type="email"
-                value={newUserData.email}
-                onChange={(event) => setNewUserData((old) => ({ ...old, email: event.target.value }))}
-                placeholder={t("auth.email")}
-                required
-              />
-              <input
-                type="password"
-                value={newUserData.password}
-                onChange={(event) => setNewUserData((old) => ({ ...old, password: event.target.value }))}
-                placeholder={t('auth.passwordPlaceholder')}
-                required
-              />
-              <button type="submit">{t('admin.createUser')}</button>
+            <form onSubmit={inviteMember} className="form">
+              <label>{t("campaigns.inviteLabel")}
+                <input value={inviteName} onChange={(event) => setInviteName(event.target.value)}
+                  placeholder={t("auth.username")} required />
+              </label>
+              <button type="submit" disabled={!inviteName.trim()}>{t("campaigns.invite")}</button>
             </form>
             <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
               {t('admin.refreshUsers')}
@@ -2395,7 +2385,7 @@ function Campaign({ session }) {
                       {PAGE_KEYS.map((pageKey) => (
                         <th key={pageKey}>{t(`admin.pageNames.${pageKey}`)}</th>
                       ))}
-                      <th>{t('admin.resetPassword')}</th>
+                      <th>{t("campaigns.membership")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2425,15 +2415,9 @@ function Campaign({ session }) {
                             );
                           })}
                           <td>
-                            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                              <input
-                                type="password"
-                                value={passwordResetDrafts[user.id] ?? ""}
-                                onChange={(event) => setPasswordResetDrafts((drafts) => ({ ...drafts, [user.id]: event.target.value }))}
-                                placeholder={t('admin.newPassword')}
-                              />
-                              <button type="button" disabled={user.is_admin && !currentUser?.is_admin} onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
-                            </div>
+                            {user.is_admin ? t("campaigns.director") : user.id !== currentUser?.id && (
+                              <button type="button" onClick={() => removeMember(user.id)}>{t("campaigns.removeMember")}</button>
+                            )}
                           </td>
                         </tr>
                       );
