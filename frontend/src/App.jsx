@@ -48,25 +48,31 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAP COMPONENT =====
-function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tempMarker = null }) {
+function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null }) {
   const { t } = useTranslation();
   const containerRef = useRef(null);
   const innerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [activePopup, setActivePopup] = useState(null); // { event, screenX, screenY }
+  const [selection, setSelection] = useState(null);
   const dragRef = useRef(null);
   const didDragRef = useRef(false);
-  const popupTimerRef = useRef(null);
 
   const markers = useMemo(() => {
     return events.map((event) => ({
       ...event,
+      markerKey: `${event.event_type ? "event" : "poi"}-${event.id}`,
       top: `${event.latitude}%`,
       left: `${event.longitude}%`,
     }));
   }, [events]);
+
+  useEffect(() => setSelection(null), [mapId]);
+
+  const activeMarker = selection?.mapId === mapId
+    ? markers.find((marker) => marker.markerKey === selection?.markerKey)
+    : null;
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -120,27 +126,13 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tem
     const latitude = ((e.clientY - innerBounds.top) / innerBounds.height) * 100;
     const longitude = ((e.clientX - innerBounds.left) / innerBounds.width) * 100;
     if (latitude < 0 || latitude > 100 || longitude < 0 || longitude > 100) return;
-    setActivePopup(null);
     onMapClick({ latitude: Number(latitude.toFixed(2)), longitude: Number(longitude.toFixed(2)) });
   };
 
-  const openPopup = (e, event) => {
-    clearTimeout(popupTimerRef.current);
-    const b = e.currentTarget.getBoundingClientRect();
-    setActivePopup({ event, screenX: b.left + b.width / 2, screenY: b.top });
-  };
-
-  const scheduleClosePopup = () => {
-    popupTimerRef.current = setTimeout(() => setActivePopup(null), 120);
-  };
-
-  const handleMarkerClick = (e, event) => {
+  const handleMarkerClick = (e, marker) => {
     e.stopPropagation();
-    if (didDragRef.current) return;
-    const b = e.currentTarget.getBoundingClientRect();
-    setActivePopup((prev) =>
-      prev?.event.id === event.id ? null : { event, screenX: b.left + b.width / 2, screenY: b.top }
-    );
+    if (e.detail !== 0 && didDragRef.current) return;
+    setSelection(activeMarker?.markerKey === marker.markerKey ? null : { mapId, markerKey: marker.markerKey });
   };
 
   const resetView = () => {
@@ -151,72 +143,79 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, tem
   const cursorStyle = isDragging ? "grabbing" : readonly ? "grab" : "crosshair";
 
   return (
-    <div style={{ position: "relative" }}>
-      <div
-        ref={containerRef}
-        className="map-wrapper"
-        style={{ cursor: cursorStyle, userSelect: "none", touchAction: "none" }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onClick={handleClick}
-      >
+    <div>
+      <div className="map-popup-anchor" onKeyDown={(event) => {
+        if (event.key === "Escape") setSelection(null);
+      }}>
         <div
-          ref={innerRef}
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: "0 0",
-            width: "100%",
-            position: "relative",
-          }}
+          ref={containerRef}
+          className="map-wrapper"
+          style={{ cursor: cursorStyle, userSelect: "none", touchAction: "none" }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onClick={handleClick}
         >
-          <img
-            src={mapImageUrl || "/map-placeholder.svg"}
-            alt="Campaign map"
-            className="map-image"
-            draggable={false}
-          />
-          {tempMarker && (
-            <div
-              className="marker marker-temp"
-              style={{ top: `${tempMarker.latitude}%`, left: `${tempMarker.longitude}%` }}
-            />
-          )}
-          {markers.map((event) => (
-            <button
-              type="button"
-              key={event.id}
-              className={`marker marker-${event.event_type || event.poi_type}${activePopup?.event.id === event.id ? " marker-active" : ""}`}
-              style={{ top: event.top, left: event.left }}
-              title={event.title}
-              onMouseEnter={(e) => openPopup(e, event)}
-              onMouseLeave={scheduleClosePopup}
-              onClick={(e) => handleMarkerClick(e, event)}
-            />
-          ))}
-        </div>
-      </div>
-      {activePopup && (
-        <div
-          className="marker-popup"
-          style={{ left: activePopup.screenX, top: activePopup.screenY }}
-          onMouseEnter={() => clearTimeout(popupTimerRef.current)}
-          onMouseLeave={scheduleClosePopup}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <strong>{activePopup.event.title}</strong>
-          <span className="marker-popup-type">{activePopup.event.event_type || activePopup.event.poi_type}</span>
-          {activePopup.event.description && <p>{activePopup.event.description}</p>}
-          {activePopup.event.image_path && (
+          <div
+            ref={innerRef}
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "0 0",
+              width: "100%",
+              position: "relative",
+            }}
+          >
             <img
-              src={activePopup.event.image_path}
-              alt={activePopup.event.title}
-              className="marker-popup-image"
+              src={mapImageUrl || "/map-placeholder.svg"}
+              alt="Campaign map"
+              className="map-image"
+              draggable={false}
             />
-          )}
+            {tempMarker && (
+              <div
+                className="marker marker-temp"
+                style={{ top: `${tempMarker.latitude}%`, left: `${tempMarker.longitude}%` }}
+              />
+            )}
+            {markers.map((event) => (
+              <button
+                type="button"
+                key={event.markerKey}
+                className={`marker marker-${event.event_type || event.poi_type}${activeMarker?.markerKey === event.markerKey ? " marker-active" : ""}`}
+                style={{ top: event.top, left: event.left }}
+                title={event.title}
+                aria-label={event.title}
+                aria-expanded={activeMarker?.markerKey === event.markerKey}
+                onClick={(e) => handleMarkerClick(e, event)}
+              />
+            ))}
+          </div>
         </div>
-      )}
+        {activeMarker && (
+          <div
+            className={`marker-popup${activeMarker.latitude * zoom < 35 ? " marker-popup-below" : ""}`}
+            style={{
+              left: `clamp(var(--popup-half-width), calc(${activeMarker.longitude * zoom}% + ${pan.x}px), 100% - var(--popup-half-width))`,
+              top: `clamp(0px, calc(${activeMarker.latitude * zoom}% + ${pan.y}px), 100%)`,
+            }}
+          >
+            <div className="marker-popup-heading">
+              <strong>{activeMarker.title}</strong>
+              <button type="button" aria-label={t("tracker.closeMarker")} onClick={() => setSelection(null)}>
+                ×
+              </button>
+            </div>
+            <div className="marker-popup-content">
+              <span className="marker-popup-type">{activeMarker.event_type || activeMarker.poi_type}</span>
+              {activeMarker.description && <p>{activeMarker.description}</p>}
+              {activeMarker.image_path && (
+                <img src={activeMarker.image_path} alt={activeMarker.title} className="marker-popup-image" />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.5rem" }}>
         <small style={{ color: "#5d3a1a" }}>{t('tracker.legend')}</small>
         <button type="button" onClick={resetView} style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}>{t('tracker.resetView')}</button>
@@ -1430,6 +1429,7 @@ function Campaign({ session }) {
                 </div>
                 {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
                 <MapView
+                  mapId={trackerMap?.id}
                   events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
                   onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
                   mapImageUrl={trackerMap ? trackerMap.file_path : null}
@@ -2282,6 +2282,7 @@ function Campaign({ session }) {
                 </button>
                 <p>{t('admin.clickToPlacePOI')}</p>
                 <MapView
+                  mapId={selectedMap.id}
                   events={selectedMapPOIs}
                   onMapClick={addPOI}
                   mapImageUrl={selectedMap.file_path}
