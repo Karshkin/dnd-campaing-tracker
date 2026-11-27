@@ -356,7 +356,7 @@ function Campaign({ session }) {
   const ownsSelectedCharacter = selectedCharacter?.user_id === currentUser?.id;
   const canEditSelectedCharacter = ownsSelectedCharacter && hasPagePermission("characters", "edit");
   const [characterInventory, setCharacterInventory] = useState([]);
-  const [characterDiary, setCharacterDiary] = useState([]);
+  const [characterDiary, setCharacterDiary] = useState({ loading: true, entries: [] });
 
   // Form drafts
   const [eventDraft, setEventDraft] = useState({ title: "", description: "", event_type: "event", latitude: 50, longitude: 50, map_id: null });
@@ -696,7 +696,7 @@ function Campaign({ session }) {
     const requestId = ++characterDetailRequest.current;
     setSelectedCharacter(character);
     setCharacterInventory([]);
-    setCharacterDiary([]);
+    setCharacterDiary({ loading: true, entries: [] });
 
     const ownsCharacter = character.user_id === currentUser?.id;
     const [inventoryResponse, diaryResponse] = await Promise.all([
@@ -709,7 +709,7 @@ function Campaign({ session }) {
     ]);
     if (requestId !== characterDetailRequest.current) return;
     setCharacterInventory(inventory);
-    setCharacterDiary(diary);
+    setCharacterDiary({ loading: false, entries: diary, failed: !diaryResponse.ok });
   };
 
   // Character Inventory: Add Item
@@ -1689,7 +1689,7 @@ function Campaign({ session }) {
       {activeView === "characters" && isAuthenticated && hasPagePermission("characters", "view") ? (
         <section className="grid">
           <article className="card wide">
-            <h2>{t('characters.title')}</h2>
+            {!selectedCharacter && <h2>{t('characters.title')}</h2>}
             {!selectedCharacter ? (
               <>
                 {hasPagePermission("characters", "edit") && (
@@ -1815,7 +1815,7 @@ function Campaign({ session }) {
                 )}
               </>
             ) : (
-              <>
+              <div className="character-detail-layout">
                 <button type="button" onClick={() => setSelectedCharacter(null)}>
                   {t('characters.back')}
                 </button>
@@ -1850,12 +1850,16 @@ function Campaign({ session }) {
                     )}
                   </div>
                   <div>
-                    <h3 style={{ margin: "0 0 0.25rem" }}>
+                    <h2 className="character-profile-name">
                       {selectedCharacter.image_path && selectedCharacter.emoji && <span aria-hidden="true">{selectedCharacter.emoji} </span>}
-                      {selectedCharacter.name} - {t('characters.lvl')} {selectedCharacter.level} {selectedCharacter.race} {selectedCharacter.character_class}
-                    </h3>
+                      {selectedCharacter.name}
+                    </h2>
+                    <ul className="character-profile-stats">
+                      {[`${t("characters.lvl")} ${selectedCharacter.level}`, selectedCharacter.race, selectedCharacter.character_class]
+                        .filter(Boolean).map((stat, index) => <li key={index}>{stat}</li>)}
+                    </ul>
                     {currentUser?.is_admin && selectedCharacter.owner?.username && (
-                      <p>{t('characters.owner', { name: selectedCharacter.owner.username })}</p>
+                      <p className="character-profile-owner">{t('characters.owner', { name: selectedCharacter.owner.username })}</p>
                     )}
                     {selectedCharacter.organization_id && organizations.find((o) => o.id === selectedCharacter.organization_id) && (
                       <span style={{ fontSize: "0.85rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "2px 8px", display: "inline-block", marginBottom: "0.5rem" }}>
@@ -1930,36 +1934,44 @@ function Campaign({ session }) {
                 )}
 
                 <section className="character-sheet-panel">
-                <h4>{t('characters.diary')}</h4>
-                {canEditSelectedCharacter && (
-                  <form onSubmit={addCharacterDiaryEntry} className="form">
-                  <input
-                    value={charDiaryDraft.title}
-                    onChange={(e) => setCharDiaryDraft((old) => ({ ...old, title: e.target.value }))}
-                    placeholder={t('diary.entryTitle')}
-                    required
-                  />
-                  <textarea
-                    value={charDiaryDraft.content}
-                    onChange={(e) => setCharDiaryDraft((old) => ({ ...old, content: e.target.value }))}
-                    placeholder={t('characters.diaryPlaceholder')}
-                    rows={4}
-                    required
-                  />
-                  <button type="submit">{t('diary.add')}</button>
-                  </form>
-                )}
-                <ul>
-                  {characterDiary.map((entry) => (
-                    <li key={entry.id}>
-                      <strong>{entry.title}</strong>
-                      <p>{entry.content}</p>
-                      <small>{new Date(entry.created_at).toLocaleDateString()}</small>
-                    </li>
-                  ))}
-                </ul>
+                  <h4>{t('characters.diary')}</h4>
+                  {canEditSelectedCharacter && (
+                    <form onSubmit={addCharacterDiaryEntry} className="form">
+                    <input
+                      value={charDiaryDraft.title}
+                      onChange={(e) => setCharDiaryDraft((old) => ({ ...old, title: e.target.value }))}
+                      placeholder={t('diary.entryTitle')}
+                      required
+                    />
+                    <textarea
+                      value={charDiaryDraft.content}
+                      onChange={(e) => setCharDiaryDraft((old) => ({ ...old, content: e.target.value }))}
+                      placeholder={t('characters.diaryPlaceholder')}
+                      rows={4}
+                      required
+                    />
+                    <button type="submit">{t('diary.add')}</button>
+                    </form>
+                  )}
+                  {characterDiary.loading ? (
+                    <p role="status" className="character-sheet-empty">{t("common.loading")}</p>
+                  ) : characterDiary.failed ? (
+                    <button type="button" onClick={() => loadCharacterDetails(selectedCharacter)}>{t("characterSheet.retryDiary")}</button>
+                  ) : characterDiary.entries.length === 0 ? (
+                    <p className="character-sheet-empty">{t("characterSheet.noDiaryEntries")}</p>
+                  ) : (
+                    <ul className="character-diary-entries">
+                      {characterDiary.entries.map((entry) => (
+                        <li key={entry.id}>
+                          <strong>{entry.title}</strong>
+                          <p>{entry.content}</p>
+                          <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleDateString(lang)}</time>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
-              </>
+              </div>
             )}
           </article>
         </section>

@@ -97,6 +97,8 @@
     "createError": "No se pudo crear la entrada del diario."
   },
   "characterSheet": {
+    "noDiaryEntries": "Este personaje aún no tiene entradas en el diario.",
+    "retryDiary": "Volver a cargar el diario",
     "companions": "Compañeros de campaña",
     "noCompanions": "Todavía no hay compañeros en la campaña.",
     "title": "Ficha del personaje",

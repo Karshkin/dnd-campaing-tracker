@@ -78,3 +78,56 @@ details.character-sheet-panel[open] summary { margin-bottom: 0.8rem; }
 .character-companion-grid li > div { display: grid; gap: 0.18rem; min-width: 0; overflow-wrap: anywhere; }
 .character-companion-grid small { color: #694122; }
 .character-companion-emoji { font-size: 1.8rem; }
+
+.character-detail-layout {
+  max-width: 64rem;
+  margin-inline: auto;
+}
+
+.character-detail-layout .character-profile-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(0.75rem, 3vw, 1.5rem);
+  margin-block: 1rem;
+}
+
+.character-detail-layout .character-profile-name {
+  margin: 0 0 0.45rem;
+  padding: 0;
+  border: 0;
+  font-size: clamp(1.25rem, 3vw, 1.9rem);
+  line-height: 1.2;
+}
+
+.character-profile-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.character-detail-layout .character-profile-stats li {
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #d8bd98;
+  border-radius: 0.3rem;
+  background: #fff8ed;
+  color: #59351c;
+  font-size: 0.88rem;
+  box-shadow: none;
+}
+
+.character-profile-owner { margin: 0.6rem 0; color: #694122; }
+.character-diary-entries { margin-bottom: 0; }
+.character-diary-entries p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.character-diary-entries time { font-size: 0.85rem; color: #694122; }
+
+@media (max-width: 480px) {
+  .character-detail-layout .character-profile-header {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+}
