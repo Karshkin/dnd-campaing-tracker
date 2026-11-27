@@ -102,7 +102,19 @@ try {
   await request(api, diaryPath, "POST", { title: "Session 1", content: "Found a cave" });
   assert.equal((await request(api, itemPath))[0].id, item.id);
   assert.equal((await request(api, diaryPath))[0].content, "Found a cave");
-  assert.deepEqual(ok(await dmClient.from("characters").select().eq("id", character.id)), []);
+  const visibleCharacter = ok(await dmClient.from("characters").select("id,owner:profiles(username)")
+    .eq("id", character.id).single());
+  assert.equal(visibleCharacter.owner.username, `Player ${run}`);
+  assert.equal(ok(await dmClient.from("character_diary").select("content")
+    .eq("character_id", character.id).single()).content, "Found a cave");
+  assert.deepEqual(ok(await dmClient.from("characters").update({ name: "Unauthorized" })
+    .eq("id", character.id).select()), []);
+  assert.ok((await dmClient.from("character_diary").insert({
+    character_id: character.id, title: "Unauthorized", content: "Unauthorized",
+  })).error);
+  assert.deepEqual(ok(await dmClient.from("character_inventory").select().eq("id", item.id)), []);
+  assert.deepEqual(ok(await second.from("characters").select().eq("id", character.id)), []);
+  assert.deepEqual(ok(await second.from("character_diary").select().eq("character_id", character.id)), []);
   assert.deepEqual(ok(await second.from("character_inventory").select().eq("id", item.id)), []);
   assert.ok((await second.from("character_inventory").insert({ item_name: "Unauthorized", character_id: character.id })).error);
   assert.ok((await supabase.from("characters").update({ user_id: secondUser.id }).eq("id", character.id)).error);

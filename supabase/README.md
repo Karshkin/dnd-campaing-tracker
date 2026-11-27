@@ -41,8 +41,9 @@ returning id, username, is_admin;
 Inicia sesión con el correo y abre `/#/admin` desde la aplicación. Los permisos de sección
 `none`, `view`, `edit` y `admin` se gestionan allí. Un administrador de la sección de
 administración puede gestionar jugadores y sus permisos. Solo un administrador global puede
-cambiar la contraseña de otro administrador global. Los personajes y sus archivos siguen
-siendo privados para su propietario, incluso cuando otra cuenta es administradora.
+cambiar la contraseña de otro administrador global. Un administrador global también puede consultar los personajes y diarios de todos los
+jugadores en la sección de personajes. Solo sus propietarios pueden editarlos y acceder
+a sus inventarios y archivos adjuntos.
 
 ## 2. Importar una campaña existente, si la hay
 

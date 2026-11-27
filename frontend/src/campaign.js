@@ -149,14 +149,14 @@ async function deleteRecord(table, id) {
   await removeFiles([...mediaFields.map((field) => row[field]), ...poiFiles.map((poi) => poi.image_path)].filter(Boolean));
 }
 
-async function listRows(query, order, ascending) {
+async function listRows(query, order, ascending, transform = (row) => row) {
   const rows = [];
   const size = 1000;
   query.order(order, { ascending });
   if (order !== "id") query.order("id");
   for (let offset = 0; ; offset += size) {
     const page = await value(query.range(offset, offset + size - 1));
-    rows.push(...await signMedia(page));
+    rows.push(...await signMedia(page.map(transform)));
     if (page.length < size) return rows;
   }
 }
@@ -187,10 +187,19 @@ async function dispatch(path, method, body) {
   const parent = collection === "maps" ? "map_id" : "character_id";
 
   if (method === "GET") {
-    const query = source.select();
+    const query = collection === "characters" && !nested
+      ? source.select("*,owner:profiles(username)")
+      : source.select();
     if (nested) query.eq(parent, id);
     if (collection === "maps" && !nested) query.eq("is_active", true);
     if (collection === "events" && params.has("map_id")) query.eq("map_id", params.get("map_id"));
+    if (collection === "characters" && !nested) {
+      const { session } = await value(supabase.auth.getSession());
+      const ownId = session?.user.id;
+      return listRows(query, order, ascending, (row) => row.user_id === ownId
+        ? row
+        : { ...row, image_path: null, sheet_file_path: null });
+    }
     return listRows(query, order, ascending);
   }
 
