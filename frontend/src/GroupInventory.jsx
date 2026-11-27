@@ -149,6 +149,7 @@ export function GroupInventory({ userId, characters, director, revision }) {
   const [groups, setGroups] = useState(null);
   const [memberIds, setMemberIds] = useState([]);
   const [selection, setSelection] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -161,15 +162,16 @@ export function GroupInventory({ userId, characters, director, revision }) {
       if (version !== sequence.current) return;
       setGroups(data.groups);
       setMemberIds(data.memberIds);
+      const visible = data.groups.filter((group) => Boolean(group.archived_at) === showArchived);
       setSelection((current) => {
-        if (data.groups.some((group) => group.id === preferred)) return preferred;
-        if (data.groups.some((group) => group.id === current)) return current;
-        return data.memberIds[0] ?? data.groups[0]?.id ?? null;
+        if (visible.some((group) => group.id === preferred)) return preferred;
+        if (visible.some((group) => group.id === current)) return current;
+        return visible.find((group) => data.memberIds.includes(group.id))?.id ?? visible[0]?.id ?? null;
       });
     } catch (err) {
       if (version === sequence.current) setError(err.message);
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     refresh();
@@ -198,7 +200,8 @@ export function GroupInventory({ userId, characters, director, revision }) {
 
   const [moves, setMoves] = useState(0);
   const [contributionChanges, setContributionChanges] = useState(0);
-  const selectedGroup = groups?.find(({ id }) => id === selection);
+  const visibleGroups = groups?.filter((group) => Boolean(group.archived_at) === showArchived);
+  const selectedGroup = visibleGroups?.find(({ id }) => id === selection);
   const archived = Boolean(selectedGroup?.archived_at);
   const joined = memberIds.includes(selection);
 
@@ -232,14 +235,18 @@ export function GroupInventory({ userId, characters, director, revision }) {
       </details>
       {error && <p className="error" role="alert">{error}</p>}
       {!groups && !error && <p role="status">{t("common.loading")}</p>}
-      {groups?.length === 0 && <p>{t("groupInventory.noGroups")}</p>}
-      {groups?.length > 0 && (
+      {groups?.some((group) => group.archived_at) && <button type="button" aria-pressed={showArchived}
+        onClick={() => { setShowArchived(!showArchived); setSelection(null); }}>
+        {showArchived ? "Ver grupos activos" : "Ver grupos archivados"}
+      </button>}
+      {visibleGroups?.length === 0 && <p>{t("groupInventory.noGroups")}</p>}
+      {selectedGroup && (
         <>
           <div className="group-inventory-actions">
             <label>
               {t("groupInventory.group")}
               <select value={selection ?? ""} disabled={busy} onChange={(event) => setSelection(Number(event.target.value))}>
-                {groups.map((group) => (
+                {visibleGroups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}{group.archived_at ? " · Archivado" : ""}{memberIds.includes(group.id) ? ` · ${t("groupInventory.member")}` : ""}
                   </option>
