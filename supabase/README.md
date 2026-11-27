@@ -45,7 +45,10 @@ cambiar la contraseña de otro administrador global. Un administrador global tam
 los jugadores en la sección de personajes. También puede ver sus retratos y galerías.
 Los propietarios editan las fichas y las imágenes. El inventario y los archivos de ficha
 siguen reservados a sus propietarios. Los jugadores con acceso a Personajes ven una
-lista de compañeros con su nombre, emoji, raza, clase, nivel y propietario.
+lista de compañeros con su nombre, emoji, raza, clase, nivel y propietario. La sección
+Admin reúne las cuentas y los permisos. La creación de criaturas, PNJ y organizaciones
+está en cada sección para quienes pueden editarla. La carga y eliminación de mapas está
+en la Crónica para quienes tienen permiso de administración.
 
 ## 2. Importar una campaña existente, si la hay
 

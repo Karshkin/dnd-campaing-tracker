@@ -335,20 +335,11 @@ function Campaign({ session }) {
   const [orgError, setOrgError] = useState("");
 
   // Map state
-  const [selectedMapRecord, setSelectedMap] = useState(null);
-  const selectedMap = maps.find((row) => row.id === selectedMapRecord?.id) ?? null;
-  const [selectedMapPOIs, setSelectedMapPOIs] = useState([]); // admin: POIs for selected map
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
-  const [adminEventMapRecord, setAdminEventMap] = useState(null);
-  const adminEventMap = maps.find((row) => row.id === adminEventMapRecord?.id) ?? null;
-  const [adminMapEvents, setAdminMapEvents] = useState([]);   // admin: events for selected map
 
   // POI draft (pending placement)
-  const [poiDraft, setPoiDraft] = useState(null); // { latitude, longitude } or null
-  const [poiDraftData, setPoiDraftData] = useState({ title: "", description: "", poi_type: "location" });
-  const [poiImageFile, setPoiImageFile] = useState(null);
 
   // Tracker view: unified marker placement for authenticated users
   const [trackerMarkerDraft, setTrackerMarkerDraft] = useState(null); // { latitude, longitude }
@@ -378,7 +369,6 @@ function Campaign({ session }) {
   const [characterDiary, setCharacterDiary] = useState({ loading: true, entries: [] });
 
   // Form drafts
-  const [eventDraft, setEventDraft] = useState({ title: "", description: "", event_type: "event", latitude: 50, longitude: 50, map_id: null });
   const [resourceDraft, setResourceDraft] = useState({ name: "", quantity: 0, notes: "" });
   const [resourceImageFile, setResourceImageFile] = useState(null);
   const [selectedResourceImage, setSelectedResourceImage] = useState(null); // URL string for lightbox
@@ -398,7 +388,6 @@ function Campaign({ session }) {
   const [charDiaryDraft, setCharDiaryDraft] = useState({ title: "", content: "" });
 
   // Error states
-  const [eventError, setEventError] = useState("");
   const [resourceError, setResourceError] = useState("");
   const [diaryError, setDiaryError] = useState("");
   const [characterError, setCharacterError] = useState("");
@@ -535,45 +524,12 @@ function Campaign({ session }) {
     }
   }, [activeView, isAuthenticated, currentUser, pagePermissions]);
 
-  // Campaign: Submit Event
-  const submitEvent = async (event) => {
-    event.preventDefault();
-    const response = await request(`/events`, {
-      method: "POST",
-      body: eventDraft,
-    });
-    if (response.ok) {
-      setEventError("");
-      setEventDraft({ title: "", description: "", event_type: "event", latitude: 50, longitude: 50, map_id: adminEventMap?.id ?? null });
-      refreshEvents();
-      if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
-      return;
-    }
-    if (response.status === 401) {
-      logout();
-      setEventError(t('auth.sessionExpired'));
-      return;
-    }
-    setEventError(await readErrorMessage(response, t('admin.createEventError')));
-  };
-
-  // Admin: Load events for a specific map
-  const loadAdminMapEvents = async (mapId) => {
-    try {
-      const response = await request(`/events?map_id=${mapId}`);
-      if (response.ok) setAdminMapEvents(await response.json());
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   // Campaign: Delete Event
   const deleteEvent = async (id) => {
     await request(`/events/${id}`, {
       method: "DELETE",
     });
     refreshEvents();
-    if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
   };
 
   // Resources: Submit Resource
@@ -774,6 +730,7 @@ function Campaign({ session }) {
   // Bestiary: Submit Creature
   const submitCreature = async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const response = await request(`/creatures`, {
       method: "POST",
       body: creatureDraft,
@@ -789,6 +746,7 @@ function Campaign({ session }) {
         });
         setCreatureImageFile(null);
       }
+      form.reset();
       setCreatureError("");
       setCreatureDraft({ name: "", creature_type: "", challenge_rating: "", armor_class: 0, hit_points: "", speed: "", abilities: "", weaknesses: "", resistances: "", immunities: "", notes: "" });
       refreshCreatures();
@@ -808,6 +766,7 @@ function Campaign({ session }) {
   // Allies: Submit Ally
   const submitAlly = async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const response = await request(`/allies`, {
       method: "POST",
       body: allyDraft,
@@ -823,6 +782,7 @@ function Campaign({ session }) {
         });
         setAllyImageFile(null);
       }
+      form.reset();
       setAllyError("");
       setAllyDraft({ name: "", role: "", location: "", relationship: "", notes: "", organization_id: null });
       refreshAllies();
@@ -878,6 +838,7 @@ function Campaign({ session }) {
 
   const submitOrganization = async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const res = await request(`/organizations`, {
       method: "POST",
       body: orgDraft,
@@ -894,6 +855,7 @@ function Campaign({ session }) {
         setOrgImageFile(null);
       }
       setOrgDraft({ name: "", description: "" });
+      form.reset();
       setOrgError("");
       refreshOrganizations();
     } else {
@@ -944,22 +906,6 @@ function Campaign({ session }) {
       method: "DELETE",
     });
     refreshMaps();
-    if (selectedMap?.id === id) {
-      setSelectedMap(null);
-      setSelectedMapPOIs([]);
-    }
-  };
-
-  // Maps: Load POIs for a map (admin panel)
-  const loadMapPOIs = async (mapId) => {
-    try {
-      const response = await request(`/maps/${mapId}/pois`);
-      if (response.ok) {
-        setSelectedMapPOIs(await response.json());
-      }
-    } catch (error) {
-      console.error(error);
-    }
   };
 
   // Maps: Load POIs for tracker view
@@ -982,38 +928,6 @@ function Campaign({ session }) {
     }
   }, [maps]);
 
-  // Maps: Add POI (set draft position on map click)
-  const addPOI = (coords) => {
-    if (!selectedMap) return;
-    setPoiDraft(coords);
-    setPoiDraftData({ title: "", description: "", poi_type: "location" });
-    setPoiImageFile(null);
-  };
-
-  const submitPOI = async (e) => {
-    e.preventDefault();
-    if (!selectedMap || !poiDraft) return;
-    const response = await request(`/pois`, {
-      method: "POST",
-      body: {
-        map_id: selectedMap.id,
-        title: poiDraftData.title,
-        description: poiDraftData.description,
-        poi_type: poiDraftData.poi_type,
-        latitude: poiDraft.latitude,
-        longitude: poiDraft.longitude,
-      },
-    });
-    if (response.ok) {
-      const newPoi = await response.json();
-      if (poiImageFile) {
-        await uploadMarkerImage("pois", newPoi.id, poiImageFile);
-      }
-      setPoiDraft(null);
-      loadMapPOIs(selectedMap.id);
-    }
-  };
-
   const uploadMarkerImage = async (type, id, file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -1023,30 +937,19 @@ function Campaign({ session }) {
     });
   };
 
-  const uploadPOIImage = async (poiId, file) => {
-    await uploadMarkerImage("pois", poiId, file);
-    if (selectedMap) loadMapPOIs(selectedMap.id);
-  };
-
-  const uploadEventImage = async (eventId, file) => {
-    await uploadMarkerImage("events", eventId, file);
-    if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
-  };
-
   useEffect(() => {
     const refreshMapDetails = () => {
       if (!hasPagePermission("tracker")) return;
       if (trackerMap) loadTrackerMapPOIs(trackerMap.id);
-      if (selectedMap) loadMapPOIs(selectedMap.id);
-      if (adminEventMap) loadAdminMapEvents(adminEventMap.id);
-    };
+
+      };
     window.addEventListener("focus", refreshMapDetails);
     const timer = setInterval(refreshMapDetails, 12 * 60 * 1000);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", refreshMapDetails);
     };
-  }, [trackerMap?.id, selectedMap?.id, adminEventMap?.id, pagePermissions.tracker]);
+  }, [trackerMap?.id, pagePermissions.tracker]);
 
   // Tracker: submit unified marker (POI or event)
   const submitTrackerMarker = async (e) => {
@@ -1098,12 +1001,12 @@ function Campaign({ session }) {
     });
     if (res.ok) {
       if (editingPoiImageFile) {
-        await uploadPOIImage(id, editingPoiImageFile);
+        await uploadMarkerImage("pois", id, editingPoiImageFile);
         setEditingPoiImageFile(null);
       }
       setEditingPoi(null);
       if (trackerMap) loadTrackerMapPOIs(trackerMap.id);
-      if (selectedMap) loadMapPOIs(selectedMap.id);
+
     }
   };
 
@@ -1117,7 +1020,7 @@ function Campaign({ session }) {
     });
     if (res.ok) {
       if (editingEventImageFile) {
-        await uploadEventImage(id, editingEventImageFile);
+        await uploadMarkerImage("events", id, editingEventImageFile);
         setEditingEventImageFile(null);
       }
       setEditingEvent(null);
@@ -1145,16 +1048,6 @@ function Campaign({ session }) {
       body: fd,
     });
     refreshResources();
-  };
-
-  // Maps: Delete POI
-  const deletePOI = async (poiId) => {
-    await request(`/pois/${poiId}`, {
-      method: "DELETE",
-    });
-    if (selectedMap) {
-      loadMapPOIs(selectedMap.id);
-    }
   };
 
   // Users: Load all users (admin only)
@@ -1243,7 +1136,7 @@ function Campaign({ session }) {
         </div>
         <div className="tabs">
           <LanguagePicker />
-          {(!isAuthenticated || hasPagePermission("tracker", "view")) && (
+          {(!isAuthenticated || hasPagePermission("tracker", "view") || canManageAdmin) && (
             <button type="button" onClick={() => navigate("tracker")} className={activeView === "tracker" ? "active" : ""}>
               {t('nav.chronicle')}
             </button>
@@ -1384,6 +1277,38 @@ function Campaign({ session }) {
       ) : null}
 
       {/* TRACKER VIEW */}
+      {activeView === "tracker" && canManageAdmin && (
+        <section className="grid">
+          <article className="card wide">
+            <details className="character-sheet-panel">
+              <summary>{t('admin.manageMaps')}</summary>
+              <form onSubmit={uploadMap} className="form">
+                <input name="name" placeholder={t('admin.mapName')} required />
+                <input name="description" placeholder={t('common.description')} />
+                <input name="file" type="file" accept="image/*" required />
+                <button type="submit">{t('admin.uploadMapBtn')}</button>
+              </form>
+
+              <h3>{t('admin.uploadedMaps')}</h3>
+              <ul>
+                {maps.map((map) => (
+                  <li key={map.id} className="row">
+                    <span>
+                      <strong>{map.name}</strong> {map.description && `- ${map.description}`}
+                    </span>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button type="button" onClick={() => deleteMap(map.id)}>
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </article>
+        </section>
+      )}
+
       {activeView === "tracker" && (!isAuthenticated || hasPagePermission("tracker")) ? (
         <section className="grid">
           <article className="card wide">
@@ -1413,11 +1338,6 @@ function Campaign({ session }) {
                   <p style={{ margin: 0, color: "#7a5a33", lineHeight: 1.5 }}>
                     {canManageAdmin ? t('tracker.noMapAdminHint') : t('tracker.noMapUserHint')}
                   </p>
-                  {canManageAdmin ? (
-                    <button type="button" onClick={() => navigate("admin")} style={{ marginTop: "1rem" }}>
-                      {t('nav.admin')}
-                    </button>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -1998,6 +1918,82 @@ function Campaign({ session }) {
         <section className="grid">
           <article className="card wide">
             <h2>{t('bestiary.title')}</h2>
+            {hasPagePermission("bestiary", "edit") && (
+              <details className="character-sheet-panel">
+                <summary>{t("admin.addCreature")}</summary>
+                <form onSubmit={submitCreature} className="form">
+                  <input
+                    value={creatureDraft.name}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, name: e.target.value }))}
+                    placeholder={t('admin.creatureName')}
+                    required
+                  />
+                  <input
+                    value={creatureDraft.creature_type}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, creature_type: e.target.value }))}
+                    placeholder={t('admin.creatureTypePlaceholder')}
+                  />
+                  <input
+                    value={creatureDraft.challenge_rating}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, challenge_rating: e.target.value }))}
+                    placeholder={t('admin.challengeRating')}
+                  />
+                  <input
+                    type="number"
+                    value={creatureDraft.armor_class}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, armor_class: Number(e.target.value) }))}
+                    placeholder={t('admin.armorClass')}
+                  />
+                  <input
+                    value={creatureDraft.hit_points}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, hit_points: e.target.value }))}
+                    placeholder={t('admin.hitPoints')}
+                  />
+                  <input
+                    value={creatureDraft.speed}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, speed: e.target.value }))}
+                    placeholder={t('admin.speedPlaceholder')}
+                  />
+                  <textarea
+                    value={creatureDraft.abilities}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, abilities: e.target.value }))}
+                    placeholder={t('admin.abilities')}
+                    rows={2}
+                  />
+                  <textarea
+                    value={creatureDraft.weaknesses}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, weaknesses: e.target.value }))}
+                    placeholder={t('admin.weaknesses')}
+                    rows={2}
+                  />
+                  <textarea
+                    value={creatureDraft.resistances}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, resistances: e.target.value }))}
+                    placeholder={t('admin.resistances')}
+                    rows={2}
+                  />
+                  <textarea
+                    value={creatureDraft.immunities}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, immunities: e.target.value }))}
+                    placeholder={t('admin.immunities')}
+                    rows={2}
+                  />
+                  <textarea
+                    value={creatureDraft.notes}
+                    onChange={(e) => setCreatureDraft((old) => ({ ...old, notes: e.target.value }))}
+                    placeholder={t('common.notes')}
+                    rows={3}
+                  />
+                  <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+                    {t('common.imageOptionalLabel')}
+                    <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setCreatureImageFile(e.target.files[0] || null)} />
+                  </label>
+                  {creatureImageFile && <small style={{ color: "#5d3a1a" }}>{creatureImageFile.name}</small>}
+                  <button type="submit">{t('admin.addCreature')}</button>
+                </form>
+                {creatureError ? <p className="error">{creatureError}</p> : null}
+              </details>
+            )}
             <h3>{t('bestiary.encountered')}</h3>
             <ul>
               {creatures.map((creature) => (
@@ -2071,6 +2067,30 @@ function Campaign({ session }) {
         <section style={{ padding: "1rem", maxWidth: "1200px", margin: "0 auto" }}>
           <div className="card wide">
             <h2>{t('organizations.title')}</h2>
+            {hasPagePermission("organizations", "edit") && (
+              <details className="character-sheet-panel">
+                <summary>{t("admin.addOrg")}</summary>
+                <form onSubmit={submitOrganization} className="form">
+                  <input
+                    value={orgDraft.name}
+                    onChange={(e) => setOrgDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder={t('admin.orgNamePlaceholder')}
+                    required
+                  />
+                  <input
+                    value={orgDraft.description}
+                    onChange={(e) => setOrgDraft((d) => ({ ...d, description: e.target.value }))}
+                    placeholder={t('common.descriptionOptional')}
+                  />
+                  <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+                    🖼️ {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setOrgImageFile(e.target.files[0] || null)} />
+                  </label>
+                  <button type="submit">{t('admin.addOrgBtn')}</button>
+                </form>
+                {orgError ? <p className="error">{orgError}</p> : null}
+              </details>
+            )}
 
             {organizations.length === 0 && (
               <p style={{ textAlign: "center", marginTop: "1rem" }}>{t('organizations.empty')}</p>
@@ -2184,6 +2204,56 @@ function Campaign({ session }) {
         <section className="grid">
           <article className="card wide">
             <h2>{t('npcs.title')}</h2>
+            {hasPagePermission("npcs", "edit") && (
+              <details className="character-sheet-panel">
+                <summary>{t("admin.addNPC")}</summary>
+                <form onSubmit={submitAlly} className="form">
+                  <input
+                    value={allyDraft.name}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, name: e.target.value }))}
+                    placeholder={t('common.name')}
+                    required
+                  />
+                  <input
+                    value={allyDraft.role}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, role: e.target.value }))}
+                    placeholder={t('admin.rolePlaceholder')}
+                  />
+                  <input
+                    value={allyDraft.location}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, location: e.target.value }))}
+                    placeholder={t('admin.locationPlaceholder')}
+                  />
+                  <textarea
+                    value={allyDraft.relationship}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, relationship: e.target.value }))}
+                    placeholder={t('admin.relationshipPlaceholder')}
+                    rows={2}
+                  />
+                  <textarea
+                    value={allyDraft.notes}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, notes: e.target.value }))}
+                    placeholder={t('common.notes')}
+                    rows={3}
+                  />
+                  <select
+                    value={allyDraft.organization_id ?? ""}
+                    onChange={(e) => setAllyDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
+                  >
+                    <option value="">{t('admin.noOrgOption')}</option>
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                  <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+                    🖼️ {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setAllyImageFile(e.target.files[0] || null)} />
+                  </label>
+                  <button type="submit">{t('admin.addNPCBtn')}</button>
+                </form>
+                {allyError ? <p className="error">{allyError}</p> : null}
+              </details>
+            )}
 
             <h3>{t('npcs.known')}</h3>
             <ul>
@@ -2277,367 +2347,92 @@ function Campaign({ session }) {
       {activeView === "admin" && isAuthenticated && hasPagePermission("admin", "admin") ? (
         <section className="grid">
           <article className="card wide">
-            <h2>{t('admin.manageMaps')}</h2>
-            <h3>{t('admin.uploadMap')}</h3>
-            <form onSubmit={uploadMap} className="form">
-              <input name="name" placeholder={t('admin.mapName')} required />
-              <input name="description" placeholder={t('common.description')} />
-              <input name="file" type="file" accept="image/*" required />
-              <button type="submit">{t('admin.uploadMapBtn')}</button>
+            <h2>{t('admin.userManagement')}</h2>
+            <form onSubmit={createUser} className="form">
+              <input
+                value={newUserData.username}
+                onChange={(event) => setNewUserData((old) => ({ ...old, username: event.target.value }))}
+                placeholder={t('auth.usernamePlaceholder')}
+                required
+              />
+              <input
+                type="email"
+                value={newUserData.email}
+                onChange={(event) => setNewUserData((old) => ({ ...old, email: event.target.value }))}
+                placeholder={t("auth.email")}
+                required
+              />
+              <input
+                type="password"
+                value={newUserData.password}
+                onChange={(event) => setNewUserData((old) => ({ ...old, password: event.target.value }))}
+                placeholder={t('auth.passwordPlaceholder')}
+                required
+              />
+              <button type="submit">{t('admin.createUser')}</button>
             </form>
+            <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
+              {t('admin.refreshUsers')}
+            </button>
+            {users.length > 0 && (
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t('auth.username')}</th>
+                      {PAGE_KEYS.map((pageKey) => (
+                        <th key={pageKey}>{t(`admin.pageNames.${pageKey}`)}</th>
+                      ))}
+                      <th>{t('admin.resetPassword')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => {
+                      const permissionMap = Object.fromEntries((user.permissions ?? []).map((item) => [item.page_key, item.permission_level]));
 
-            <h3>{t('admin.uploadedMaps')}</h3>
-            <ul>
-              {maps.map((map) => (
-                <li key={map.id} className="row">
-                  <span>
-                    <strong>{map.name}</strong> {map.description && `- ${map.description}`}
-                  </span>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedMap(map);
-                        loadMapPOIs(map.id);
-                      }}
-                    >
-                      {t('admin.managePOIs')}
-                    </button>
-                    <button type="button" onClick={() => deleteMap(map.id)}>
-                      {t('common.delete')}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            {selectedMap && (
-              <>
-                <h3>{t('admin.managePOIsFor')} - {selectedMap.name}</h3>
-                <button type="button" onClick={() => { setSelectedMap(null); setPoiDraft(null); }} style={{ marginBottom: "1rem" }}>
-                  {t('admin.backToMaps')}
-                </button>
-                <p>{t('admin.clickToPlacePOI')}</p>
-                <MapView
-                  mapId={selectedMap.id}
-                  events={selectedMapPOIs}
-                  onMapClick={addPOI}
-                  mapImageUrl={selectedMap.file_path}
-                  tempMarker={poiDraft}
-                />
-                {poiDraft && (
-                  <form onSubmit={submitPOI} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
-                    <p style={{ margin: 0 }}><strong>{t('admin.newPOI')}</strong> {t('tracker.at')} {poiDraft.latitude.toFixed(1)}%, {poiDraft.longitude.toFixed(1)}%</p>
-                    <input
-                      value={poiDraftData.title}
-                      onChange={(e) => setPoiDraftData((d) => ({ ...d, title: e.target.value }))}
-                      placeholder={t('common.title')}
-                      required
-                    />
-                    <input
-                      value={poiDraftData.description}
-                      onChange={(e) => setPoiDraftData((d) => ({ ...d, description: e.target.value }))}
-                      placeholder={t('common.descriptionOptional')}
-                    />
-                    <select value={poiDraftData.poi_type} onChange={(e) => setPoiDraftData((d) => ({ ...d, poi_type: e.target.value }))}>
-                      <option value="location">{t('tracker.location')}</option>
-                      <option value="city">{t('tracker.city')}</option>
-                      <option value="dungeon">{t('tracker.dungeon')}</option>
-                      <option value="landmark">{t('tracker.landmark')}</option>
-                      <option value="quest">{t('tracker.quest')}</option>
-                    </select>
-                    <label style={{ fontSize: "0.9rem" }}>{t('common.imageOptional')}:
-                      <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setPoiImageFile(e.target.files[0] || null)} />
-                    </label>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button type="submit">{t('admin.addPOI')}</button>
-                      <button type="button" onClick={() => setPoiDraft(null)}>{t('common.cancel')}</button>
-                    </div>
-                  </form>
-                )}
-                <ul style={{ marginTop: "1rem" }}>
-                  {selectedMapPOIs.map((poi) => (
-                    <li key={poi.id} style={{ marginBottom: "0.5rem" }}>
-                      {editingPoi?.id === poi.id ? (
-                        <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
-                          <input value={editingPoi.description} onChange={(e) => setEditingPoi((p) => ({ ...p, description: e.target.value }))} placeholder={t('common.description')} style={{ flex: "1 1 120px" }} />
-                          <select value={editingPoi.poi_type} onChange={(e) => setEditingPoi((p) => ({ ...p, poi_type: e.target.value }))}>
-                            <option value="location">{t('tracker.location')}</option>
-                            <option value="city">{t('tracker.city')}</option>
-                            <option value="dungeon">{t('tracker.dungeon')}</option>
-                            <option value="landmark">{t('tracker.landmark')}</option>
-                            <option value="quest">{t('tracker.quest')}</option>
-                          </select>
-                          <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                            🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
-                          </label>
-                          {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
-                          <button type="submit">{t('common.save')}</button>
-                          <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
-                        </form>
-                      ) : (
-                        <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                          <span style={{ flexGrow: 1 }}>
-                            <strong>{poi.title}</strong> ({poi.poi_type}){poi.description && ` — ${poi.description}`}
-                          </span>
-                          {poi.image_path ? (
-                            <img src={poi.image_path} alt={poi.title} style={{ height: "36px", borderRadius: "3px" }} />
-                          ) : (
-                            <label style={{ fontSize: "0.8rem", cursor: "pointer" }}>
-                              🖼️ {t('common.addImage')}
-                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadPOIImage(poi.id, e.target.files[0]); }} />
-                            </label>
-                          )}
-                          <button type="button" onClick={() => setEditingPoi({ id: poi.id, title: poi.title, description: poi.description, poi_type: poi.poi_type })}>{t('common.edit')}</button>
-                          <button type="button" onClick={() => deletePOI(poi.id)}>{t('common.delete')}</button>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </>
+                      return (
+                        <tr key={user.id}>
+                          <td>
+                            <strong>{user.username}</strong>
+                            {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "#8b4513" }}>{t('admin.currentUser')}</span> : null}
+                          </td>
+                          {PAGE_KEYS.map((pageKey) => {
+                            const permissionLocked = user.is_admin || (user.id === currentUser?.id && pageKey === "admin");
+                            return (
+                              <td key={pageKey}>
+                                <select
+                                  value={permissionMap[pageKey] ?? "none"}
+                                  disabled={permissionLocked}
+                                  onChange={(event) => updatePermission(user.id, pageKey, event.target.value)}
+                                >
+                                  {PERMISSION_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>{t(`admin.permissionLevels.${option}`)}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            );
+                          })}
+                          <td>
+                            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                              <input
+                                type="password"
+                                value={passwordResetDrafts[user.id] ?? ""}
+                                onChange={(event) => setPasswordResetDrafts((drafts) => ({ ...drafts, [user.id]: event.target.value }))}
+                                placeholder={t('admin.newPassword')}
+                              />
+                              <button type="button" disabled={user.is_admin && !currentUser?.is_admin} onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
+            {users.length === 0 && <p><small>{t('admin.loadUsersHint')}</small></p>}
+            {userManagementError ? <p className="error">{userManagementError}</p> : null}
           </article>
-
-          <article className="card wide">
-            <h2>{t('admin.manageBestiary')}</h2>
-            <h3>{t('admin.addCreature')}</h3>
-            <form onSubmit={submitCreature} className="form">
-              <input
-                value={creatureDraft.name}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, name: e.target.value }))}
-                placeholder={t('admin.creatureName')}
-                required
-              />
-              <input
-                value={creatureDraft.creature_type}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, creature_type: e.target.value }))}
-                placeholder={t('admin.creatureTypePlaceholder')}
-              />
-              <input
-                value={creatureDraft.challenge_rating}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, challenge_rating: e.target.value }))}
-                placeholder={t('admin.challengeRating')}
-              />
-              <input
-                type="number"
-                value={creatureDraft.armor_class}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, armor_class: Number(e.target.value) }))}
-                placeholder={t('admin.armorClass')}
-              />
-              <input
-                value={creatureDraft.hit_points}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, hit_points: e.target.value }))}
-                placeholder={t('admin.hitPoints')}
-              />
-              <input
-                value={creatureDraft.speed}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, speed: e.target.value }))}
-                placeholder={t('admin.speedPlaceholder')}
-              />
-              <textarea
-                value={creatureDraft.abilities}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, abilities: e.target.value }))}
-                placeholder={t('admin.abilities')}
-                rows={2}
-              />
-              <textarea
-                value={creatureDraft.weaknesses}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, weaknesses: e.target.value }))}
-                placeholder={t('admin.weaknesses')}
-                rows={2}
-              />
-              <textarea
-                value={creatureDraft.resistances}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, resistances: e.target.value }))}
-                placeholder={t('admin.resistances')}
-                rows={2}
-              />
-              <textarea
-                value={creatureDraft.immunities}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, immunities: e.target.value }))}
-                placeholder={t('admin.immunities')}
-                rows={2}
-              />
-              <textarea
-                value={creatureDraft.notes}
-                onChange={(e) => setCreatureDraft((old) => ({ ...old, notes: e.target.value }))}
-                placeholder={t('common.notes')}
-                rows={3}
-              />
-              <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                {t('common.imageOptionalLabel')}
-                <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setCreatureImageFile(e.target.files[0] || null)} />
-              </label>
-              {creatureImageFile && <small style={{ color: "#5d3a1a" }}>{creatureImageFile.name}</small>}
-              <button type="submit">{t('admin.addCreature')}</button>
-            </form>
-            {creatureError ? <p className="error">{creatureError}</p> : null}
-          </article>
-
-          <article className="card wide">
-            <h2>{t('admin.manageOrgs')}</h2>
-            <h3>{t('admin.addOrg')}</h3>
-            <form onSubmit={submitOrganization} className="form">
-              <input
-                value={orgDraft.name}
-                onChange={(e) => setOrgDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder={t('admin.orgNamePlaceholder')}
-                required
-              />
-              <input
-                value={orgDraft.description}
-                onChange={(e) => setOrgDraft((d) => ({ ...d, description: e.target.value }))}
-                placeholder={t('common.descriptionOptional')}
-              />
-              <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                🖼️ {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setOrgImageFile(e.target.files[0] || null)} />
-              </label>
-              <button type="submit">{t('admin.addOrgBtn')}</button>
-            </form>
-            {orgError ? <p className="error">{orgError}</p> : null}
-          </article>
-
-          <article className="card wide">
-            <h2>{t('admin.manageNPCs')}</h2>
-            <h3>{t('admin.addNPC')}</h3>
-            <form onSubmit={submitAlly} className="form">
-              <input
-                value={allyDraft.name}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, name: e.target.value }))}
-                placeholder={t('common.name')}
-                required
-              />
-              <input
-                value={allyDraft.role}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, role: e.target.value }))}
-                placeholder={t('admin.rolePlaceholder')}
-              />
-              <input
-                value={allyDraft.location}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, location: e.target.value }))}
-                placeholder={t('admin.locationPlaceholder')}
-              />
-              <textarea
-                value={allyDraft.relationship}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, relationship: e.target.value }))}
-                placeholder={t('admin.relationshipPlaceholder')}
-                rows={2}
-              />
-              <textarea
-                value={allyDraft.notes}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, notes: e.target.value }))}
-                placeholder={t('common.notes')}
-                rows={3}
-              />
-              <select
-                value={allyDraft.organization_id ?? ""}
-                onChange={(e) => setAllyDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
-              >
-                <option value="">{t('admin.noOrgOption')}</option>
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
-              <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                🖼️ {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setAllyImageFile(e.target.files[0] || null)} />
-              </label>
-              <button type="submit">{t('admin.addNPCBtn')}</button>
-            </form>
-            {allyError ? <p className="error">{allyError}</p> : null}
-          </article>
-
-            <article className="card wide">
-              <h2>{t('admin.userManagement')}</h2>
-              <form onSubmit={createUser} className="form">
-                <input
-                  value={newUserData.username}
-                  onChange={(event) => setNewUserData((old) => ({ ...old, username: event.target.value }))}
-                  placeholder={t('auth.usernamePlaceholder')}
-                  required
-                />
-                <input
-                  type="email"
-                  value={newUserData.email}
-                  onChange={(event) => setNewUserData((old) => ({ ...old, email: event.target.value }))}
-                  placeholder={t("auth.email")}
-                  required
-                />
-                <input
-                  type="password"
-                  value={newUserData.password}
-                  onChange={(event) => setNewUserData((old) => ({ ...old, password: event.target.value }))}
-                  placeholder={t('auth.passwordPlaceholder')}
-                  required
-                />
-                <button type="submit">{t('admin.createUser')}</button>
-              </form>
-              <button type="button" onClick={loadUsers} style={{ marginBottom: "1rem" }}>
-                {t('admin.refreshUsers')}
-              </button>
-              {users.length > 0 && (
-                <div style={{ overflowX: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t('auth.username')}</th>
-                        {PAGE_KEYS.map((pageKey) => (
-                          <th key={pageKey}>{t(`admin.pageNames.${pageKey}`)}</th>
-                        ))}
-                        <th>{t('admin.resetPassword')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((user) => {
-                        const permissionMap = Object.fromEntries((user.permissions ?? []).map((item) => [item.page_key, item.permission_level]));
-
-                        return (
-                          <tr key={user.id}>
-                            <td>
-                              <strong>{user.username}</strong>
-                              {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "#8b4513" }}>{t('admin.currentUser')}</span> : null}
-                            </td>
-                            {PAGE_KEYS.map((pageKey) => {
-                              const permissionLocked = user.is_admin || (user.id === currentUser?.id && pageKey === "admin");
-                              return (
-                                <td key={pageKey}>
-                                  <select
-                                    value={permissionMap[pageKey] ?? "none"}
-                                    disabled={permissionLocked}
-                                    onChange={(event) => updatePermission(user.id, pageKey, event.target.value)}
-                                  >
-                                    {PERMISSION_OPTIONS.map((option) => (
-                                      <option key={option} value={option}>{t(`admin.permissionLevels.${option}`)}</option>
-                                    ))}
-                                  </select>
-                                </td>
-                              );
-                            })}
-                            <td>
-                              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                                <input
-                                  type="password"
-                                  value={passwordResetDrafts[user.id] ?? ""}
-                                  onChange={(event) => setPasswordResetDrafts((drafts) => ({ ...drafts, [user.id]: event.target.value }))}
-                                  placeholder={t('admin.newPassword')}
-                                />
-                                <button type="button" disabled={user.is_admin && !currentUser?.is_admin} onClick={() => resetUserPassword(user.id)}>{t('admin.resetPassword')}</button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {users.length === 0 && <p><small>{t('admin.loadUsersHint')}</small></p>}
-              {userManagementError ? <p className="error">{userManagementError}</p> : null}
-            </article>
         </section>
       ) : activeView === "admin" && !isAuthenticated ? (
         <section className="grid">
