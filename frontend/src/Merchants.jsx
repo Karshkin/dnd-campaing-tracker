@@ -83,13 +83,12 @@ function Trade({ product, traders, onChange }) {
   const [receipt,setReceipt] = useState(null);
   const retry = useRef(null);
   const loadInventory = useCallback(async () => {
-    if (!character) return [];
-    return unwrap(supabase.from("character_inventory").select("id,item_name,quantity").eq("character_id",Number(character)));
-  },[character]);
+    if (!character || mode !== "sell") return [];
+    return unwrap(supabase.rpc("shop_sellable",{ target: product.id, buyer: Number(character) }));
+  },[character,mode,product.id]);
   const inventory = useCampaignQuery(loadInventory);
   const mutation = useCampaignMutation(async () => { await inventory.refresh(); await onChange(); });
-  const eligible = inventory.data?.filter(({ item_name }) =>
-    item_name.trim().toLocaleLowerCase() === product.name.trim().toLocaleLowerCase()) ?? [];
+  const eligible = inventory.data ?? [];
   return <form className="chronicle-flow" onSubmit={async (event) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
@@ -117,7 +116,9 @@ function Trade({ product, traders, onChange }) {
       {mode === "sell" && <>
         <label>Objeto <select name="item" required defaultValue="">
           <option value="">Seleccionar</option>
-          {eligible.map(({ id,item_name,quantity }) => <option key={id} value={id}>{item_name} × {quantity}</option>)}
+          {eligible.map(({ id,item_name,quantity,unit_price }) => <option key={id} value={id}>
+            {item_name} × {quantity} · {unit_price} {coins[product.denomination]} por unidad
+          </option>)}
         </select></label>
         <label>Ingreso mínimo aceptado <input name="minimum" type="number" min={1} required defaultValue={1} /></label>
       </>}

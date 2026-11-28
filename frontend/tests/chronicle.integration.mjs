@@ -460,11 +460,6 @@ try {
   assert.equal(impact.members, 1);
   assert.equal(impact.coins.gp, 4);
   assert.ok(impact.history > 0);
-  ok(await manageGroup(director, "archive", group));
-  assert.ok((await movement(member, deposit)).error);
-  assert.equal(await wallet(member, "group_id", group), 4);
-  assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
-
   const shop = await insert(director, "campaign_shops", { name: "Mercader del faro", npc_id: npc.id, available: true });
   const product = await insert(director, "shop_products", { shop_id: shop.id, name: "Cuerda nueva", price: 2, sell_price: 1, stock: 1 });
   const imagePath = `${campaignId}/${product.id}/${randomUUID()}.png`;
@@ -487,6 +482,8 @@ try {
   assert.equal(ok(await director.from("shop_products").select("stock").eq("id",product.id).single()).stock,0);
   assert.ok((await trade(member,{ ...order, request_id: randomUUID() })).error);
   const gear = ok(await member.from("character_inventory").select("id").eq("character_id",character.id).eq("item_name",product.name).single());
+  assert.equal(ok(await member.rpc("shop_sellable",{ target: product.id,buyer: character.id }))[0].id,gear.id);
+  assert.deepEqual(ok(await onlooker.rpc("shop_sellable",{ target: product.id,buyer: character.id })),[]);
   const sale = { ...order, request_id: randomUUID(), action: "sell", item: gear.id, ceiling: 1 };
   ok(await trade(member,sale));
   assert.equal(await wallet(member,"character_id",character.id),starting-1);
@@ -494,6 +491,20 @@ try {
   assert.ok((await trade(member,{ ...sale, request_id: randomUUID() })).error);
   assert.equal(ok(await onlooker.from("shop_transactions").select("id")).length,0);
   assert.equal(ok(await director.from("shop_transactions").select("id")).length,2);
+  ok(await director.from("campaign_shops").update({ faction_id: faction.id, reputation_minimum: 25, discount: 50 }).eq("id",shop.id));
+  ok(await action(director,"reputation",{ ...reputation, delta: 200, reason: "Mercado" }));
+  const discounted = await insert(director,"shop_products",{ shop_id: shop.id, name: "Aceite", price: 4,stock: 1 });
+  const discountOrder = { ...order, request_id: randomUUID(),target: discounted.id,ceiling: 2 };
+  ok(await trade(member,discountOrder));
+  assert.equal(await wallet(member,"character_id",character.id),starting-3);
+  const expensive = await insert(director,"shop_products",{ shop_id: shop.id, name: "Carro", price: 1000,stock: 1 });
+  assert.ok((await trade(member,{ ...order, request_id: randomUUID(),target: expensive.id,ceiling: 1000 })).error);
+  assert.equal(ok(await director.from("shop_products").select("stock").eq("id",expensive.id).single()).stock,1);
+  assert.equal(await wallet(member,"character_id",character.id),starting-3);
+  ok(await manageGroup(director, "archive", group));
+  assert.ok((await movement(member, deposit)).error);
+  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
   console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");
 } finally {
   await browser?.close();
