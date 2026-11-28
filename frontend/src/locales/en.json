@@ -64,6 +64,14 @@
     "expand": "Expand navigation",
     "collapse": "Collapse navigation"
   },
+  "choices": {
+    "search": "Search",
+    "selected": "{{count}} selected",
+    "unavailable": "Entry #{{id}}",
+    "remove": "Remove {{name}}",
+    "all": "Select all attendees",
+    "empty": "No matches"
+  },
   "common": {
     "loading": "Loading…",
     "title": "Title",

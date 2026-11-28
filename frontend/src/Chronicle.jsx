@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { CollaborativeQuests } from "./CollaborativeQuests";
 import DOMPurify from "dompurify";
 import { campaignChronicle, groupInventory, treasury } from "./campaign";
 import { Choices, SelectRow, useCampaignMutation, useCampaignQuery } from "./ChronicleControls";
@@ -65,8 +66,8 @@ function SessionEditor({ session, data, entities, characters, onSave, busy, onCa
     <label>Recompensas <textarea name="rewards" defaultValue={session.rewards} /></label>
     <label>Decisiones <textarea name="decisions" defaultValue={session.decisions} /></label>
     <label>Consecuencias <textarea name="consequences" defaultValue={session.consequences} /></label>
-    <div className="chronicle-actions">
-      <Choices label="Asistencia" rows={characters} values={attendance} onChange={setAttendance} />
+    <div className="chronicle-choice-grid">
+      <Choices selectAll label="Asistencia" rows={characters} values={attendance} onChange={setAttendance} />
       {Object.entries(linkTypes).map(([key, label]) => <Choices key={key} label={label} rows={entities[key]}
         values={links[key]} onChange={(ids) => setLinks({ ...links, [key]: ids })} />)}
     </div>
@@ -200,48 +201,8 @@ function Gallery({ data, campaignId, director, mutation }) {
   </>;
 }
 
-function Quests({ data, director, mutation, sessionState }) {
-  const [filter, setFilter] = useState("");
-  const [editing, setEditing] = useState(null);
-  const [status, setStatus] = useState("active");
-  const [session, setSession] = useState("");
-  return <section className="chronicle-flow">
-    <div className="chronicle-actions">
-    <SelectRow label="Estado de misión" rows={rows(questStates)} value={filter} onChange={setFilter} empty="Todas" />
-    {director && <button type="button" onClick={() => { setStatus("active"); setSession(""); setEditing({}); }}>Nueva misión</button>}
-    </div>
-    {editing && <form key={editing.id ?? "new"} className="form" onSubmit={async (event) => {
-      event.preventDefault();
-      const fields = Object.fromEntries(new FormData(event.currentTarget));
-      if (await mutation.run(() => campaignChronicle.save("chronicle_quests", {
-        ...fields, status, session_id: session || null,
-      }, editing.id))) setEditing(null);
-    }}>
-      <label>Título <input name="title" maxLength={120} defaultValue={editing.title} required /></label>
-      <label>Descripción <textarea name="description" defaultValue={editing.description} /></label>
-      <SelectRow label="Estado" rows={rows(questStates)} value={status} onChange={setStatus} />
-      <SelectRow label="Sesión" rows={data.sessions} value={session} onChange={setSession} empty="Sin sesión" />
-      <div className="chronicle-actions">
-        <button disabled={mutation.busy}>Guardar misión</button>
-        <button type="button" onClick={() => setEditing(null)}>Cancelar</button>
-      </div>
-    </form>}
-    <ul className="chronicle-list">{data.quests.filter((row) => !filter || row.status === filter).map((row) => (
-      <li key={row.id}><strong>{row.title}</strong> · {questStates[row.status]} · {row.description}
-        {row.session_id && <> · <a href={`#session-${row.session_id}`} onClick={(event) => {
-          event.preventDefault();
-          sessionState(row.session_id);
-        }}>{data.sessions.find(({ id }) => id === row.session_id)?.title}</a></>}
-        {director && <button type="button" onClick={() => {
-          setEditing(row); setStatus(row.status); setSession(row.session_id ?? "");
-        }}>Editar misión</button>}
-      </li>
-    ))}</ul>
-  </section>;
-}
-
 export function Chronicle({ campaignId, director, characters, organizations, allies, creatures, openEntity,
-  onClose, legacy }) {
+  onClose, legacy, authors, userId }) {
   const { t } = useTranslation();
   const [section, setSection] = useState("sessions");
   const load = useCallback(async () => {
@@ -284,12 +245,13 @@ export function Chronicle({ campaignId, director, characters, organizations, all
     </nav>
     {mutation.error && <p className="error" role="alert">{mutation.error}</p>}
     {section === "gallery" && <Gallery data={data} campaignId={campaignId} director={director} mutation={mutation} />}
-    {section === "quests" && <Quests data={data} director={director} mutation={mutation} sessionState={(id) => {
+    {section === "quests" && <CollaborativeQuests data={data} director={director} mutation={mutation} authors={authors} userId={userId}
+      characters={characters} entities={entities} sessionState={(id) => {
       setSection("sessions"); setCurrent(id); setChapter(""); setStatus(""); setSearch("");
     }} />}
     {section === "archive" && <section className="chronicle-flow">
       <label>{t("chronicleNav.searchArchive")} <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-      {legacy(search)}
+      {legacy(search, data.sessions)}
     </section>}
     {section === "sessions" && <section className="chronicle-flow">
       {director && <details><summary>Gestionar capítulos</summary>

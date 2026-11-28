@@ -222,3 +222,18 @@ validando el enlace y asignando la membresía al crear la cuenta.
 Comprueba que los enlaces directos a pestañas muestran el formulario de acceso sin
 sesión, que el formulario de registro funciona con una invitación vigente y que las
 cuentas sin membresía solo ven las campañas a las que tienen acceso.
+
+### Imágenes y archivo del inventario grupal
+
+Aplica la migración `group_inventory_artwork_and_archive` antes de publicar
+el frontend. Conserva los recursos anteriores en su tabla original y en el
+panel **Recursos del grupo**, dentro de **Inventario grupal**. Los enlaces
+`#/resources` abren el inventario. Los recursos conservan sus cantidades,
+notas, registros e imágenes, sin sumarse al monedero ni a las aportaciones.
+
+El director puede archivar un grupo tras revisar su impacto. Sus miembros,
+objetos, monedas e historial quedan en modo consulta. Las imágenes pertenecen
+a un bucket privado. Los movimientos copian la referencia, de modo que quitar
+o reemplazar una imagen en un objeto no perjudica las copias transferidas.
+Los archivos sin referencias quedan inaccesibles y pueden limpiarse mediante
+un mantenimiento que vuelva a comprobar las referencias de ambos inventarios.

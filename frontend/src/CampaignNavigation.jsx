@@ -11,7 +11,7 @@ const sections = [
     ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes], ["resources", "resources", "tracker", Boxes]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 
