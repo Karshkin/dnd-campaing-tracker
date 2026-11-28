@@ -7,7 +7,7 @@ const kinds = { achievement: "Logro", title: "Título", recognition: "Reconocimi
 const visibility = { recipient: "Solo destinatarios", campaign: "Toda la campaña", director: "Solo dirección" };
 const icons = { award: [Award, "Distintivo"], crown: [Crown, "Corona"], medal: [Medal, "Medalla"], shield: [Shield, "Escudo"], star: [Star, "Estrella"], trophy: [Trophy, "Trofeo"] };
 
-function AchievementForm({ draft, subjects, sessions, busy, save, cancel }) {
+function AchievementForm({ draft, subjects, context, busy, save, cancel }) {
   return <form className="form" onSubmit={(event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -16,7 +16,7 @@ function AchievementForm({ draft, subjects, sessions, busy, save, cancel }) {
       values[kind === "character" ? "character_id" : "group_id"] = Number(subject);
     }
     delete values.subject;
-    values.session_id ||= null;
+    for (const key of Object.keys(context)) values[key] ||= null;
     save(values);
   }}>
     {!draft.id && <label>Destinatario <select required name="subject" defaultValue="">
@@ -34,10 +34,10 @@ function AchievementForm({ draft, subjects, sessions, busy, save, cancel }) {
     </select></label>
     <label>Fecha de obtención <input name="earned_on" type="date" required
       defaultValue={draft.earned_on ?? new Date().toLocaleDateString("en-CA")} /></label>
-    <label>Sesión <select name="session_id" defaultValue={draft.session_id ?? ""}>
-      <option value="">Sin sesión</option>
-      {sessions.map(({ id,title }) => <option key={id} value={id}>{title}</option>)}
-    </select></label>
+    {Object.entries(context).map(([key,{ label, rows }]) => <label key={key}>{label} <select name={key} defaultValue={draft[key] ?? ""}>
+      <option value="">Sin vincular</option>
+      {rows.map(({ id,title }) => <option key={id} value={id}>{title}</option>)}
+    </select></label>)}
     <label>Visibilidad <select name="visibility" defaultValue={draft.visibility ?? "recipient"}>
       {Object.entries(visibility).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
     </select></label>
@@ -55,13 +55,20 @@ export function Achievements({ director, characterId, characters = [], groupsOnl
     let query = supabase.from("campaign_achievements").select().order("earned_on", { ascending: false });
     if (characterId) query = query.eq("character_id",characterId);
     else if (groupsOnly) query = query.not("group_id","is",null);
-    const [{ data: rows,error },sessions,{ groups }] = await Promise.all([
+    const [{ data: rows,error },sessions,{ groups },quests,encounterResult] = await Promise.all([
       query, campaignChronicle.list("chronicle_sessions","played_on"),
       !characterId && groupsOnly ? groupInventory.groups() : Promise.resolve({ groups: [] }),
+      campaignChronicle.list("chronicle_quests","title"),
+      director ? supabase.from("encounters").select("id,title").order("title") : supabase.rpc("visible_encounters"),
     ]);
     if (error) throw error;
-    return { rows,sessions,groups };
-  }, [characterId,groupsOnly]);
+    if (encounterResult.error) throw encounterResult.error;
+    return { rows,groups,context: {
+      session_id: { label: "Sesión", rows: sessions },
+      quest_id: { label: "Misión", rows: quests },
+      encounter_id: { label: "Encuentro", rows: encounterResult.data },
+    } };
+  }, [characterId,director,groupsOnly]);
   const { data,error,refresh } = useCampaignQuery(load);
   const mutation = useCampaignMutation(refresh);
   const heading = groupsOnly ? "Logros del grupo" : "Logros y títulos";
@@ -73,18 +80,19 @@ export function Achievements({ director, characterId, characters = [], groupsOnl
     {(error || mutation.error) && <p role="alert">{error || mutation.error}</p>}
     {!data && !error && <p role="status">Cargando distinciones…</p>}
     {data && director && subjects.length > 0 && !draft && <button type="button" onClick={() => setDraft({})}>Otorgar distinción</button>}
-    {draft && <AchievementForm key={draft.id ?? "new"} draft={draft} subjects={subjects} sessions={data.sessions}
+    {draft && <AchievementForm key={draft.id ?? "new"} draft={draft} subjects={subjects} context={data.context}
       busy={mutation.busy} cancel={() => setDraft(null)} save={async (values) => {
         if (await mutation.run(() => campaignChronicle.save("campaign_achievements",values,draft.id))) setDraft(null);
       }} />}
     {data?.rows.length === 0 && <p>No hay distinciones visibles.</p>}
     {data?.rows.length > 0 && <ul className="chronicle-list">{data.rows.map((row) => {
       const [Icon] = icons[row.icon];
-      const session = data.sessions.find(({ id }) => id === row.session_id);
+      const linked = Object.entries(data.context).flatMap(([key,{ rows }]) =>
+        rows.filter(({ id }) => id === row[key]).map(({ title }) => title));
       const group = data.groups.find(({ id }) => id === row.group_id);
       return <li key={row.id} className="chronicle-panel">
         <h4 className="row"><Icon size={19} aria-hidden="true" /> {row.name}</h4>
-        <p>{[kinds[row.kind], group?.name, row.earned_on, session?.title].filter(Boolean).join(" · ")}</p>
+        <p>{[kinds[row.kind], group?.name, row.earned_on, ...linked].filter(Boolean).join(" · ")}</p>
         {row.description && <p className="chronicle-pre">{row.description}</p>}
         {row.reward && <p>Recompensa · {row.reward}</p>}
         {director && <div className="chronicle-actions">

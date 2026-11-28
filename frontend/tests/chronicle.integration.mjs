@@ -450,6 +450,10 @@ try {
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
 
   const encounter = ok(await director.from("encounters").insert({ title: "Batalla de prueba", session_id: session.id, experience: 50, rewards: "Tesoro reservado" }).select("id").single());
+  const encounterAward = await insert(director, "campaign_achievements", {
+    kind: "recognition", name: "Defensa del faro", character_id: character.id, encounter_id: encounter.id, quest_id: quest.id,
+  });
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id",encounterAward.id)).length,0);
   const step = (client, action, expected, loot = []) =>
     client.rpc("encounter_step", { target: encounter.id, action, expected, loot });
   await insert(director, "encounter_combatants", {
@@ -483,6 +487,7 @@ try {
   assert.equal(ok(await director.from("treasury_history").select("encounter_id").eq("encounter_id",encounter.id).single()).encounter_id, encounter.id);
   assert.ok((await step(director, "complete", 3, [deposit])).error);
   assert.equal(ok(await member.rpc("visible_encounters")).find(({ id }) => id === encounter.id).rewards,"Tesoro reservado");
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id",encounterAward.id)).length,1);
 
   const legacy = new URL(base);
   legacy.hash = "/resources";
