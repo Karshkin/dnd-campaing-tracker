@@ -1,6 +1,9 @@
+import { HarptosCalendar } from "./HarptosCalendar";
+import { Encounters } from "./Encounters";
 import { Merchants } from "./Merchants";
 import { MapRoutes, useMapRoutes } from "./MapRoutes";
 import { Dashboard } from "./Dashboard";
+import { Investigation } from "./Investigation";
 import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { AtlasMap } from "./AtlasMap";
@@ -16,6 +19,7 @@ import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheet
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
+import { Achievements } from "./Achievements";
 import { CollaborativeDiary } from "./CollaborativeDiary";
 import { Chronicle } from "./Chronicle";
 import { Reputation } from "./Reputation";
@@ -81,7 +85,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["home", "correspondence", "tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "calendar", "encounters", "correspondence", "investigation", "tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -367,7 +371,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     const requiredPermissions = {
       tracker: ["tracker", "view"],
       home: ["tracker", "view"],
+      calendar: ["tracker", "view"],
+      encounters: ["tracker", "view"],
       correspondence: ["tracker", "view"],
+      investigation: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       merchants: ["tracker", "view"],
@@ -1085,6 +1092,14 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
         <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} views={views} />
       )}
 
+      {activeView === "calendar" && isAuthenticated && hasPagePermission("tracker") &&
+        <HarptosCalendar director={campaign?.is_director} characters={characters} />}
+      {activeView === "encounters" && isAuthenticated && hasPagePermission("tracker") &&
+        <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} npcs={allies} />}
+      {activeView === "investigation" && campaign && hasPagePermission("tracker") && (
+        <Investigation director={campaign.is_director} authors={commentAuthors} characters={characters} userId={userId} />
+      )}
+
       {activeView === "correspondence" && isAuthenticated && hasPagePermission("tracker") && (
         <Correspondence director={campaign?.is_director} authors={commentAuthors} userId={userId}
           characters={campaign?.is_director ? characters : [...commentAuthors, ...companions]} />
@@ -1304,6 +1319,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           <PageHeader title={t("nav.inventory")} />
           <GroupInventory userId={userId} director={campaign?.is_director} revision={closedSessions}
             characters={campaign?.is_director ? characters : commentAuthors} />
+          <Achievements director={campaign?.is_director} groupsOnly />
         </section>
       )}
 
@@ -1537,6 +1553,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                               <details className="companion-sheet-details">
                                 <summary>{t("characterSheet.title")}</summary>
                                 <CharacterSheet character={companion} editable={false} />
+                                <Achievements characterId={companion.id} />
                                 <CampaignComments collection="characters" entryId={companion.id} authors={commentAuthors} />
                               </details>
                             </div>
@@ -1605,6 +1622,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 <CharacterSheet key={selectedCharacter.id} character={selectedCharacter} editable={canEditSelectedCharacter}
                   onSave={(draft) => saveCharacterSheet(selectedCharacter.id, draft)} />
 
+                <Achievements key={`achievements-${selectedCharacter.id}`} characterId={selectedCharacter.id}
+                  director={campaign?.is_director} characters={[selectedCharacter]} />
                 <CampaignComments key={`comments-${selectedCharacter.id}`} collection="characters"
                   entryId={selectedCharacter.id} authors={commentAuthors} />
 

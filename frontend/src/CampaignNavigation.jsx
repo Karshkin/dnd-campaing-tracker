@@ -1,15 +1,15 @@
 import { useEffect, useId, useState } from "react";
-import { BookOpen, Boxes, Castle, CircleUser, House, Mail, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, ShoppingBag, Skull, Users, X } from "lucide-react";
+import { BookOpen, Boxes, CalendarDays, Castle, CircleUser, House, Mail, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Shield, ShoppingBag, Skull, Swords, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const sections = [
-  ["campaign", [["home", "home", "tracker", House], ["chronicle", "chronicle", "tracker", BookOpen]]],
+  ["campaign", [["home", "home", "tracker", House], ["chronicle", "chronicle", "tracker", BookOpen], ["calendar", "calendar", "tracker", CalendarDays]]],
   ["world", [
     ["characters", "characters", "characters", Users], ["npcs", "npcs", "npcs", CircleUser],
     ["organizations", "organizations", "organizations", Castle], ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes], ["correspondence", "correspondence", "merchants", "merchants", "tracker", Mail]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes], ["encounters", "encounters", "tracker", Swords], ["correspondence", "correspondence", "tracker", Mail], ["investigation", "investigation", "tracker", Search], ["merchants", "merchants", "tracker", ShoppingBag]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 

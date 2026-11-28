@@ -34,8 +34,11 @@
     "removeError": "Could not remove the member."
   },
   "nav": {
+    "calendar": "Calendar",
+    "encounters": "Encounters",
     "merchants": "Shops and merchants",
     "home": "Home",
+    "investigation": "Rumors and investigation",
     "correspondence": "Correspondence",
     "language": "Language",
     "locations": "Locations and maps",

@@ -34,8 +34,11 @@
     "removeError": "No s’ha pogut treure el membre."
   },
   "nav": {
+    "calendar": "Calendari",
+    "encounters": "Trobades",
     "merchants": "Botigues i comerciants",
     "home": "Inici",
+    "investigation": "Rumors i investigació",
     "correspondence": "Correspondència",
     "language": "Idioma",
     "locations": "Localitzacions i mapes",
