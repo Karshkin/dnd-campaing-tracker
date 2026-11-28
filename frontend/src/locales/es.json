@@ -72,6 +72,23 @@
     "all": "Seleccionar toda la asistencia",
     "empty": "No hay coincidencias"
   },
+  "shell": {
+    "search": "Buscar en la campaña",
+    "noResults": "Sin resultados",
+    "notices": "Novedades",
+    "noNotices": "Aún no hay novedades visibles.",
+    "account": "Cuenta y preferencias",
+    "atlas": "Atlas de campaña",
+    "map": "Mapa",
+    "addLocation": "Añadir localización",
+    "discovered": "Localizaciones descubiertas",
+    "noPlaces": "Todavía no hay localizaciones en este mapa.",
+    "mapControls": "Controles del atlas",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa"
+  },
   "common": {
     "loading": "Cargando…",
     "title": "Título",

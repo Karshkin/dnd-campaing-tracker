@@ -72,6 +72,23 @@
     "all": "Selecciona tota l’assistència",
     "empty": "Cap coincidència"
   },
+  "shell": {
+    "search": "Cerca a la campanya",
+    "noResults": "Sense resultats",
+    "notices": "Novetats",
+    "noNotices": "Encara no hi ha novetats visibles.",
+    "account": "Compte i preferències",
+    "atlas": "Atles de campanya",
+    "map": "Mapa",
+    "addLocation": "Afegeix una localització",
+    "discovered": "Localitzacions descobertes",
+    "noPlaces": "Encara no hi ha localitzacions en aquest mapa.",
+    "mapControls": "Controls de l’atles",
+    "zoomIn": "Apropa",
+    "zoomOut": "Allunya",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Surt de la pantalla completa"
+  },
   "common": {
     "loading": "S’està carregant…",
     "title": "Títol",
