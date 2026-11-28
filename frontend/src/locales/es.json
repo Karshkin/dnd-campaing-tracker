@@ -34,6 +34,7 @@
     "removeError": "No se pudo quitar el miembro."
   },
   "nav": {
+    "home": "Inicio",
     "correspondence": "Correspondencia",
     "language": "Idioma",
     "locations": "Localizaciones y mapas",
@@ -84,6 +85,12 @@
     "addLocation": "Añadir localización",
     "discovered": "Localizaciones descubiertas",
     "noPlaces": "Todavía no hay localizaciones en este mapa.",
+    "mapLegend": "Leyenda",
+    "mapCategoryFilters": "Filtrar categorías de marcadores",
+    "expandMapDescription": "Ver descripción completa",
+    "collapseMapDescription": "Contraer descripción",
+    "noMatchingPlaces": "Ninguna localización coincide con los filtros.",
+    "markerCategories": {"event": "Eventos", "quest": "Misiones", "location": "Localizaciones", "city": "Ciudades", "dungeon": "Mazmorras", "landmark": "Monumentos"},
     "mapControls": "Controles del atlas",
     "zoomIn": "Acercar",
     "zoomOut": "Alejar",
@@ -156,7 +163,6 @@
     "event": "Evento",
     "addMarker": "Añadir Marcador",
     "manageMarkers": "Gestionar marcadores de este mapa",
-    "legend": "🔵 Eventos • 🟠 Misiones • 🟢 Localizaciones • 🟡 Ciudades • 🟣 Mazmorras • 🔷 Monumentos",
     "resetView": "⟳ Restablecer Vista"
   },
   "comments": {
@@ -317,7 +323,7 @@
     "mapUploaded": "Mapa subido correctamente.",
     "mapUploadFailed": "No se pudo subir el mapa.",
     "deleteMapConfirm": "¿Eliminar este mapa?",
-    "manageMaps": "🗺️ Gestionar Mapas",
+    "manageMaps": "Gestionar mapas",
     "uploadMap": "Subir Nuevo Mapa",
     "mapName": "Nombre del Mapa",
     "uploadMapBtn": "Subir Mapa",
