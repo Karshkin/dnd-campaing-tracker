@@ -1,3 +1,4 @@
+import { MapRouteOverlay, MapRoutes, useMapRoutes } from "./MapRoutes";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
@@ -78,7 +79,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAP COMPONENT =====
-function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null, linkedPlace }) {
+function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null, linkedPlace, routes = [], places = [] }) {
   const { t } = useTranslation();
   const containerRef = useRef(null);
   const innerRef = useRef(null);
@@ -208,6 +209,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
               className="map-image"
               draggable={false}
             />
+            <MapRouteOverlay routes={routes} places={places} />
             {tempMarker && (
               <div
                 className="marker marker-temp"
@@ -373,6 +375,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   // Map state
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
+  const mapRoutes = useMapRoutes(trackerMap?.id);
+  const [activeMapRoute, setActiveMapRoute] = useState(null);
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
 
   // POI draft (pending placement)
@@ -1323,6 +1327,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 {trackerMap && <VisibilityEditor kind="maps" id={trackerMap.id} characters={campaign?.is_director ? characters : null} />}
                 <MapView
                   mapId={trackerMap?.id}
+                  routes={(mapRoutes.data ?? []).filter((row) => row.id === activeMapRoute && row.map_id === trackerMap?.id)}
+                  places={trackerMapPOIs}
                   linkedPlace={linkedPlace}
                   events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
                   onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
@@ -1372,6 +1378,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   </form>
                 )}
 
+                {trackerMap && <MapRoutes key={trackerMap.id} mapId={trackerMap.id} routes={mapRoutes}
+                  places={trackerMapPOIs} director={campaign?.is_director} characters={characters}
+                  selected={activeMapRoute} select={setActiveMapRoute} />}
                 {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>
