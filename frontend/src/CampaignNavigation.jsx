@@ -9,7 +9,7 @@ const sections = [
     ["organizations", "organizations", "organizations", Castle], ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes], ["encounters", "encounters", "tracker", Swords], ["resources", "tracker", Boxes]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes], ["encounters", "encounters", "tracker", Swords]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 
