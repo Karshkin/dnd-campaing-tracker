@@ -1,3 +1,4 @@
+import { VisibilityEditor } from "./VisibilityEditor";
 import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1367,6 +1368,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   )}
                 </div>
                 {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "var(--ink-mid)" }}>{t('tracker.clickToPlace')}</p>}
+                {trackerMap && <VisibilityEditor kind="maps" id={trackerMap.id} characters={campaign?.is_director ? characters : null} />}
                 <MapView
                   mapId={trackerMap?.id}
                   linkedPlace={linkedPlace}
@@ -1425,6 +1427,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     <ul style={{ marginTop: "0.5rem" }}>
                       {trackerMapPOIs.map((poi) => (
                         <li key={`poi-${poi.id}`}>
+                          <VisibilityEditor kind="points_of_interest" id={poi.id} characters={campaign?.is_director ? characters : null} />
                           {editingPoi?.id === poi.id ? (
                             <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                               <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
@@ -2092,7 +2095,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     {creature.resistances && <p><strong>{t('bestiary.resistances')}</strong> {creature.resistances}</p>}
                     {creature.immunities && <p><strong>{t('bestiary.immunities')}</strong> {creature.immunities}</p>}
                     {creature.notes && <p><strong>{t('bestiary.notesLabel')}</strong> {creature.notes}</p>}
-                    <CampaignEntryTools collection="creatures" entry={creature}
+                    <CampaignEntryTools visibilityCharacters={campaign?.is_director ? characters : null} collection="creatures" entry={creature}
                       editable={hasPagePermission("bestiary", "edit")} api={request}
                       refresh={refreshCreatures} onView={setSelectedCreatureImage} />
                     <CampaignComments collection="creatures" entryId={creature.id} authors={commentAuthors} />
@@ -2222,7 +2225,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   <button type="button" onClick={() => setSelectedOrg(null)} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "var(--sienna)" }}>✕</button>
                 </div>
                 <div style={{ padding: "1rem" }}>
-                  <CampaignEntryTools collection="organizations" entry={selectedOrg}
+                  <CampaignEntryTools visibilityCharacters={campaign?.is_director ? characters : null} collection="organizations" entry={selectedOrg}
                     editable={hasPagePermission("organizations", "edit")} api={request}
                     refresh={refreshOrganizations} onView={setSelectedOrgImage} />
                   <CampaignComments collection="organizations" entryId={selectedOrg.id} authors={commentAuthors} />
@@ -2387,7 +2390,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       {ally.location && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.locationLabel')}</strong> {ally.location}</p>}
                       {ally.relationship && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.relationshipLabel')}</strong> {ally.relationship}</p>}
                       {ally.notes && <p style={{ margin: "0.2rem 0 0" }}><strong>{t('npcs.notesLabel')}</strong> {ally.notes}</p>}
-                      <CampaignEntryTools collection="allies" entry={ally} organizations={organizations}
+                      <CampaignEntryTools visibilityCharacters={campaign?.is_director ? characters : null} collection="allies" entry={ally} organizations={organizations}
                         editable={hasPagePermission("npcs", "edit")} api={request}
                         refresh={refreshAllies} onView={setSelectedAllyImage} />
                       <CampaignComments collection="allies" entryId={ally.id} authors={commentAuthors} />

@@ -1,3 +1,4 @@
+import { VisibilityEditor } from "./VisibilityEditor";
 import { useTranslation } from "react-i18next";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
@@ -200,7 +201,7 @@ function Gallery({ data, campaignId, director, mutation }) {
   </>;
 }
 
-function Quests({ data, director, mutation, sessionState }) {
+function Quests({ data, director, mutation, sessionState, characters }) {
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState(null);
   const [status, setStatus] = useState("active");
@@ -232,6 +233,7 @@ function Quests({ data, director, mutation, sessionState }) {
           event.preventDefault();
           sessionState(row.session_id);
         }}>{data.sessions.find(({ id }) => id === row.session_id)?.title}</a></>}
+        <VisibilityEditor kind="chronicle_quests" id={row.id} characters={director ? characters : null} />
         {director && <button type="button" onClick={() => {
           setEditing(row); setStatus(row.status); setSession(row.session_id ?? "");
         }}>Editar misión</button>}
@@ -284,7 +286,7 @@ export function Chronicle({ campaignId, director, characters, organizations, all
     </nav>
     {mutation.error && <p className="error" role="alert">{mutation.error}</p>}
     {section === "gallery" && <Gallery data={data} campaignId={campaignId} director={director} mutation={mutation} />}
-    {section === "quests" && <Quests data={data} director={director} mutation={mutation} sessionState={(id) => {
+    {section === "quests" && <Quests characters={characters} data={data} director={director} mutation={mutation} sessionState={(id) => {
       setSection("sessions"); setCurrent(id); setChapter(""); setStatus(""); setSearch("");
     }} />}
     {section === "archive" && <section className="chronicle-flow">
