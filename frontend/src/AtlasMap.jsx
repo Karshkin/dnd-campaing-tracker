@@ -1,3 +1,4 @@
+import { MapRouteOverlay } from "./MapRoutes";
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +6,7 @@ import { markerCategories, markerCategory } from "./atlasMarkers";
 
 const markerKey = (row) => `${row.event_type ? "event" : "poi"}-${row.id}`;
 
-export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, hiddenTypes, setHiddenTypes, markerDetails }) {
+export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, routes = [], places = [], hiddenTypes, setHiddenTypes, markerDetails }) {
   const { t } = useTranslation();
   const root = useRef(null);
   const canvas = useRef(null);
@@ -130,6 +131,7 @@ export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, l
         <img src={mapImageUrl} alt={t("tracker.worldMap")} draggable={false} onLoad={(event) => {
           setImage({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight });
         }} />
+        <MapRouteOverlay routes={routes} places={places} />
         {tempMarker && <span className="marker marker-temp" style={{ top: `${tempMarker.latitude}%`, left: `${tempMarker.longitude}%` }} />}
         {visibleEvents.map((row) => <button key={markerKey(row)} type="button"
           className="marker"

@@ -1,3 +1,4 @@
+import { MapRoutes, useMapRoutes } from "./MapRoutes";
 import { Dashboard } from "./Dashboard";
 import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
@@ -199,6 +200,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   const [placingMarker, setPlacingMarker] = useState(false);
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
+  const mapRoutes = useMapRoutes(trackerMap?.id);
+  const [activeMapRoute, setActiveMapRoute] = useState(null);
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
   const mapPlaces = trackerMapPOIs.filter((row) => row.map_id === trackerMap?.id);
   const listedPlaces = mapPlaces.filter((row) => !hiddenMarkerTypes.includes(markerCategory(row)));
@@ -1146,6 +1149,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             {placingMarker && <p className="atlas-hint" role="status">{t("tracker.clickToPlace")}</p>}
             <div className="atlas-layout">
               <AtlasMap mapId={trackerMap.id} linkedPlace={linkedPlace}
+                routes={(mapRoutes.data ?? []).filter((row) => row.id === activeMapRoute)}
+                places={trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)}
                 markerDetails={(marker) => <VisibilityEditor key={`${marker.event_type ?? "poi"}:${marker.id}`}
                   kind={marker.event_type ? "map_events" : "points_of_interest"} id={marker.id}
                   characters={campaign?.is_director ? characters : null} />}
@@ -1211,6 +1216,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   </form>
                 )}
 
+                {trackerMap && <MapRoutes key={trackerMap.id} mapId={trackerMap.id} routes={mapRoutes}
+                  places={trackerMapPOIs} director={campaign?.is_director} characters={characters}
+                  selected={activeMapRoute} select={setActiveMapRoute} />}
                 {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>

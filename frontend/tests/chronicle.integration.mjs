@@ -225,6 +225,19 @@ try {
   const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
     entity_kind, target: String(id), visibility: mode, recipients,
   });
+  const path = { map_id: map.id, name: "Ruta costera", waypoints: places.map(({ id }) => id) };
+  assert.ok((await member.from("campaign_map_routes").insert(path)).error);
+  assert.ok((await director.from("campaign_map_routes").insert({ ...path, waypoints: [places[0].id, -1] })).error);
+  const route = await insert(director, "campaign_map_routes", path);
+  assert.equal(ok(await member.from("campaign_map_routes").select("id").eq("id",route.id)).length, 1);
+  assert.equal(ok(await other.from("campaign_map_routes").select("id").eq("id",route.id)).length, 0);
+  ok(await visibility(director, "points_of_interest", places[0].id, "individual", [character.id]));
+  assert.equal(ok(await member.from("campaign_map_routes").select("id").eq("id",route.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_map_routes").select("id").eq("id",route.id)).length, 0);
+  ok(await visibility(director, "points_of_interest", places[0].id, "discovered"));
+  ok(await visibility(director, "campaign_map_routes", route.id, "hidden"));
+  assert.equal(ok(await member.from("campaign_map_routes").select("id").eq("id",route.id)).length, 0);
+  assert.equal(ok(await director.from("campaign_map_routes").select("id").eq("id",route.id)).length, 1);
   const link = await insert(director, "document_links", { document_id: letter.id, npc_id: npc.id });
   assert.equal(ok(await member.from("document_links").select("id").eq("id",link.id)).length,1);
   assert.equal(ok(await onlooker.from("document_links").select("id").eq("id",link.id)).length,0);
