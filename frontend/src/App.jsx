@@ -5,6 +5,7 @@ import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheet
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
+import { CollaborativeDiary } from "./CollaborativeDiary";
 import { Chronicle } from "./Chronicle";
 import { Reputation } from "./Reputation";
 import { ItemArtwork, ItemDetails, PersonalWallet } from "./Treasury";
@@ -404,9 +405,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   const [resourceDraft, setResourceDraft] = useState({ name: "", quantity: 0, notes: "" });
   const [resourceImageFile, setResourceImageFile] = useState(null);
   const [selectedResourceImage, setSelectedResourceImage] = useState(null); // URL string for lightbox
-  const [diaryDraft, setDiaryDraft] = useState({ title: "", content: "" });
-  const [diaryImageFile, setDiaryImageFile] = useState(null);
-  const [selectedDiaryImage, setSelectedDiaryImage] = useState(null);
   const [characterDraft, setCharacterDraft] = useState(blankCharacter);
   const [characterImageFile, setCharacterImageFile] = useState(null);
   const [selectedCharacterImage, setSelectedCharacterImage] = useState(null);
@@ -421,7 +419,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
   // Error states
   const [resourceError, setResourceError] = useState("");
-  const [diaryError, setDiaryError] = useState("");
   const [characterError, setCharacterError] = useState("");
   const [creatureError, setCreatureError] = useState("");
   const [allyError, setAllyError] = useState("");
@@ -599,36 +596,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     setResourceError(await readErrorMessage(response, t('resources.createError')));
   };
 
-  // Diary: Submit Diary Entry
-  const submitDiary = async (event) => {
-    event.preventDefault();
-    const response = await request(`/diary`, {
-      method: "POST",
-      body: diaryDraft,
-    });
-    if (response.ok) {
-      const created = await response.json();
-      if (diaryImageFile) {
-        const fd = new FormData();
-        fd.append("file", diaryImageFile);
-        await request(`/diary/${created.id}/image`, {
-          method: "POST",
-          body: fd,
-        });
-        setDiaryImageFile(null);
-      }
-      setDiaryError("");
-      setDiaryDraft({ title: "", content: "" });
-      refreshDiaryEntries();
-      return;
-    }
-    if (response.status === 401) {
-      logout();
-      setDiaryError(t('auth.sessionExpired'));
-      return;
-    }
-    setDiaryError(await readErrorMessage(response, t('diary.createError')));
-  };
 
   // Characters: Submit Character
   const submitCharacter = async (event) => {
@@ -862,15 +829,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     refreshCreatures();
   };
 
-  const uploadDiaryImage = async (entryId, file) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    await request(`/diary/${entryId}/image`, {
-      method: "POST",
-      body: fd,
-    });
-    refreshDiaryEntries();
-  };
 
   const submitOrganization = async (e) => {
     e.preventDefault();
@@ -1064,11 +1022,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     }
   };
 
-  // Diary: delete entry
-  const deleteDiaryEntry = async (id) => {
-    await request(`/diary/${id}`, { method: "DELETE" });
-    refreshDiaryEntries();
-  };
 
   // Resources: delete resource
   const deleteResource = async (id) => {
@@ -1645,70 +1598,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
               setEntityAnchor({ id: field === "place_id" ? "campaign-map" : `${field}-${entry.id}`, view });
               navigate(view);
             }}
-            legacy={(search) => (
-              <div>
-                {hasPagePermission("tracker", "edit") && (
-                  <form onSubmit={submitDiary} className="form" style={{ marginBottom: "1rem" }}>
-                    <input
-                      value={diaryDraft.title}
-                      onChange={(e) => setDiaryDraft((old) => ({ ...old, title: e.target.value }))}
-                      placeholder={t('diary.entryTitle')}
-                      required
-                    />
-                    <textarea
-                      value={diaryDraft.content}
-                      onChange={(e) => setDiaryDraft((old) => ({ ...old, content: e.target.value }))}
-                      placeholder={t('diary.contentPlaceholder')}
-                      rows={4}
-                      required
-                    />
-                    <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                      {t('common.imageOptionalLabel')}
-                      <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setDiaryImageFile(e.target.files[0] || null)} />
-                    </label>
-                    {diaryImageFile && <small style={{ color: "#5d3a1a" }}>{diaryImageFile.name}</small>}
-                    <button type="submit">{t('diary.add')}</button>
-                    {diaryError ? <p className="error">{diaryError}</p> : null}
-                  </form>
-                )}
-                <ul>
-                  {diaryEntries.filter((entry) =>
-                    [entry.title, entry.content].some((text) => text.toLowerCase().includes(search.trim().toLowerCase())))
-                    .map((entry) => (
-                    <li key={entry.id} style={{ borderBottom: "1px solid #e8d5b0", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
-                      <div className="row" style={{ alignItems: "flex-start" }}>
-                        <strong>{entry.title}</strong>
-                        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                          {hasPagePermission("tracker", "edit") && (
-                            <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
-                              🖼️
-                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
-                            </label>
-                          )}
-                          {hasPagePermission("tracker", "edit") && <button type="button" onClick={() => deleteDiaryEntry(entry.id)}>{t('common.delete')}</button>}
-                        </div>
-                      </div>
-                      <p style={{ margin: "0.25rem 0" }}>{entry.content}</p>
-                      {entry.image_path && (
-                        <img
-                          src={entry.image_path}
-                          alt={entry.title}
-                          onClick={() => setSelectedDiaryImage(entry.image_path)}
-                          style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain", borderRadius: "4px", cursor: "pointer", marginTop: "0.5rem", border: "1px solid #ddd" }}
-                          title={t('common.clickToViewFull')}
-                        />
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )} />
-
-          {selectedDiaryImage && (
-            <div onClick={() => setSelectedDiaryImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "zoom-out" }}>
-              <img src={selectedDiaryImage} alt={t("common.imageLabel")} style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "6px", boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }} />
-            </div>
-          )}
+            authors={commentAuthors} userId={userId}
+            legacy={(search, sessions) => <CollaborativeDiary entries={diaryEntries} search={search} sessions={sessions}
+              authors={commentAuthors} director={campaign.is_director} userId={userId} api={request}
+              refresh={refreshDiaryEntries} />} />
         </section>
       )}
 
