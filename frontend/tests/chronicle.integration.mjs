@@ -194,6 +194,41 @@ try {
   assert.equal(ok(await director.from("treasury_history").select().eq("operation", "distribution").single()).author_id, dm.user.id);
 
   const resource = await insert(director, "resources", { name: "Suministro anterior", quantity: 4, notes: "Existente" });
+  const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
+    entity_kind, target: String(id), visibility: mode, recipients,
+  });
+  const secret = await insert(director, "entity_secrets", {
+    kind: "organizations", entity_id: String(faction.id), label: "Sede oculta", content: "Detrás del faro",
+  });
+  assert.equal(ok(await member.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  assert.ok((await member.from("entity_secrets").insert({
+    kind: "organizations", entity_id: String(faction.id), label: "Otro", content: "Texto",
+  })).error);
+  ok(await director.from("entity_secrets").update({ audience: "characters", recipients: [character.id] }).eq("id",secret.id));
+  assert.equal(ok(await member.from("entity_secrets").select("content").eq("id",secret.id).single()).content,"Detrás del faro");
+  assert.equal(ok(await onlooker.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  assert.equal(ok(await other.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  ok(await visibility(director, "organizations", faction.id, "hidden"));
+  assert.equal(ok(await member.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  ok(await visibility(director, "organizations", faction.id, "discovered"));
+  assert.ok((await visibility(member, "organizations", faction.id, "hidden")).error);
+  assert.ok((await visibility(director, "allies", foreignNpc.id, "hidden")).error);
+  const factionArtwork = `organizations/${faction.id}/${randomUUID()}.png`;
+  ok(await director.storage.from("campaign-files").upload(factionArtwork, new Blob(["image"], { type: "image/png" })));
+  cleanup.push(() => admin.storage.from("campaign-files").remove([factionArtwork]));
+  ok(await director.from("organizations").update({ image_path: factionArtwork }).eq("id", faction.id));
+  assert.ok(ok(await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).signedUrl);
+  ok(await visibility(director, "organizations", faction.id, "hidden"));
+  assert.deepEqual(ok(await member.from("organizations").select("id").eq("id", faction.id)), []);
+  assert.deepEqual(await score(), []);
+  assert.deepEqual(ok(await member.from("chronicle_links").select("id").eq("organization_id", faction.id)), []);
+  assert.ok((await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).error);
+  ok(await visibility(director, "organizations", faction.id, "individual", [character.id]));
+  assert.equal(ok(await member.from("organizations").select("id").eq("id", faction.id).single()).id, faction.id);
+  assert.deepEqual(ok(await onlooker.from("organizations").select("id").eq("id", faction.id)), []);
+  assert.ok(ok(await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).signedUrl);
+  assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).error);
+  ok(await visibility(director, "organizations", faction.id, "discovered"));
   // Exercise the app's regular browser entry points with persisted data.
   server = await createServer({ server: { host: "127.0.0.1", port: 5178, strictPort: true } });
   await server.listen();

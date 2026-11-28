@@ -1,3 +1,4 @@
+import { VisibilityEditor } from "./VisibilityEditor";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageGallery, PrivateFields } from "./CharacterSheet";
@@ -40,7 +41,7 @@ export function EntryPrivacy({ collection, draft, setDraft }) {
   );
 }
 
-export function CampaignEntryTools({ collection, entry, editable, organizations = [], api, refresh, onView }) {
+export function CampaignEntryTools({ collection, entry, editable, organizations = [], api, refresh, onView, visibilityCharacters }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(null);
   const [showGallery, setShowGallery] = useState(false);
@@ -174,6 +175,7 @@ export function CampaignEntryTools({ collection, entry, editable, organizations 
             .map(([,label]) => t(label).replace(/:$/, "")).join(", ") })}
         </p>
       )}
+      <VisibilityEditor kind={collection} id={entry.id} characters={visibilityCharacters} />
       {showGallery && (
         <ImageGallery editable={editable} api={api} path={`${path}/gallery`} onView={onView}
           imageLabel="entryEditor.image" />

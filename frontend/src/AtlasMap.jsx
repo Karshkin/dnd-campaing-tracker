@@ -5,7 +5,7 @@ import { markerCategories, markerCategory } from "./atlasMarkers";
 
 const markerKey = (row) => `${row.event_type ? "event" : "poi"}-${row.id}`;
 
-export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, hiddenTypes, setHiddenTypes }) {
+export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, hiddenTypes, setHiddenTypes, markerDetails }) {
   const { t } = useTranslation();
   const root = useRef(null);
   const canvas = useRef(null);
@@ -160,6 +160,7 @@ export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, l
         <small>{t(`tracker.${markerCategory(active)}`)}</small>
         {active.description && <p>{active.description}</p>}
         {active.image_path && <img src={active.image_path} alt={active.title} />}
+        {markerDetails?.(active)}
       </section>}
     </div>
   </div>;
