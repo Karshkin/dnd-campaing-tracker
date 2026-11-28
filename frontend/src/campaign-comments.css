@@ -1,4 +1,4 @@
-.campaign-comments { margin-block: 0.75rem; padding: 0.7rem; background: #fffaf1; border: 1px solid #ddc8aa; border-radius: 8px; min-width: 0; }
+.campaign-comments { margin-block: 0.75rem; padding: 0.7rem; background: var(--surface-muted); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .campaign-comments summary { cursor: pointer; color: var(--sienna-dark); font-weight: 700; }
 .campaign-comment-thread { margin-top: 0.65rem; min-width: 0; }
 .campaign-comment-thread .form label { display: grid; gap: 0.25rem; }
