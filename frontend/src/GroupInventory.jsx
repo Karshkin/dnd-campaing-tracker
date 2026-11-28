@@ -149,6 +149,7 @@ export function GroupInventory({ userId, characters, director, revision }) {
   const [groups, setGroups] = useState(null);
   const [memberIds, setMemberIds] = useState([]);
   const [selection, setSelection] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -161,15 +162,16 @@ export function GroupInventory({ userId, characters, director, revision }) {
       if (version !== sequence.current) return;
       setGroups(data.groups);
       setMemberIds(data.memberIds);
+      const visible = data.groups.filter((group) => Boolean(group.archived_at) === showArchived);
       setSelection((current) => {
-        if (data.groups.some((group) => group.id === preferred)) return preferred;
-        if (data.groups.some((group) => group.id === current)) return current;
-        return data.memberIds[0] ?? data.groups[0]?.id ?? null;
+        if (visible.some((group) => group.id === preferred)) return preferred;
+        if (visible.some((group) => group.id === current)) return current;
+        return visible.find((group) => data.memberIds.includes(group.id))?.id ?? visible[0]?.id ?? null;
       });
     } catch (err) {
       if (version === sequence.current) setError(err.message);
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     refresh();
@@ -198,7 +200,19 @@ export function GroupInventory({ userId, characters, director, revision }) {
 
   const [moves, setMoves] = useState(0);
   const [contributionChanges, setContributionChanges] = useState(0);
+  const visibleGroups = groups?.filter((group) => Boolean(group.archived_at) === showArchived);
+  const selectedGroup = visibleGroups?.find(({ id }) => id === selection);
+  const archived = Boolean(selectedGroup?.archived_at);
   const joined = memberIds.includes(selection);
+
+  async function archiveGroup() {
+    const impact = await groupInventory.manage("impact", selection);
+    const coins = Object.entries(impact.coins).map(([coin, balance]) => `${balance} ${coin}`).join(", ") || "0";
+    if (window.confirm(`¿Archivar «${selectedGroup.name}»? Quedarán en modo de consulta ${impact.members} miembros, ${impact.items} unidades, ${coins} y ${impact.history} movimientos.`)) {
+      await groupInventory.manage("archive", selection);
+    }
+    return selection;
+  }
   return (
     <section className="character-sheet-panel group-inventory">
       <h3>{t("groupInventory.title")}</h3>
@@ -221,21 +235,35 @@ export function GroupInventory({ userId, characters, director, revision }) {
       </details>
       {error && <p className="error" role="alert">{error}</p>}
       {!groups && !error && <p role="status">{t("common.loading")}</p>}
-      {groups?.length === 0 && <p>{t("groupInventory.noGroups")}</p>}
-      {groups?.length > 0 && (
+      {groups?.some((group) => group.archived_at) && <button type="button" aria-pressed={showArchived}
+        onClick={() => { setShowArchived(!showArchived); setSelection(null); }}>
+        {showArchived ? "Ver grupos activos" : "Ver grupos archivados"}
+      </button>}
+      {visibleGroups?.length === 0 && <p>{t("groupInventory.noGroups")}</p>}
+      {selectedGroup && (
         <>
           <div className="group-inventory-actions">
             <label>
               {t("groupInventory.group")}
               <select value={selection ?? ""} disabled={busy} onChange={(event) => setSelection(Number(event.target.value))}>
-                {groups.map((group) => (
+                {visibleGroups.map((group) => (
                   <option key={group.id} value={group.id}>
-                    {group.name}{memberIds.includes(group.id) ? ` · ${t("groupInventory.member")}` : ""}
+                    {group.name}{group.archived_at ? " · Archivado" : ""}{memberIds.includes(group.id) ? ` · ${t("groupInventory.member")}` : ""}
                   </option>
                 ))}
               </select>
             </label>
-            {joined ? (
+            {director && !archived && selectedGroup && <>
+              <button type="button" disabled={busy} onClick={() => {
+                const groupName = window.prompt("Nombre del grupo", selectedGroup.name);
+                if (groupName !== null) changeMembership(async () => {
+                  await groupInventory.manage("rename", selection, groupName);
+                  return selection;
+                });
+              }}>Renombrar grupo</button>
+              <button type="button" disabled={busy} onClick={() => changeMembership(archiveGroup)}>Archivar grupo</button>
+            </>}
+            {!archived && (joined ? (
               <button type="button" disabled={busy} onClick={() => {
                 if (window.confirm(t("groupInventory.leaveConfirm"))) {
                   changeMembership(async () => {
@@ -249,15 +277,15 @@ export function GroupInventory({ userId, characters, director, revision }) {
                 await groupInventory.join(selection);
                 return selection;
               })}>{t("groupInventory.join")}</button>
-            )}
+            ))}
           </div>
-          {(joined || director) && <Treasury key={selection} groupId={selection} characters={characters}
+          {(joined || director) && <Treasury key={selection} groupId={selection} characters={characters} director={director} userId={userId} archived={archived}
             revision={revision + contributionChanges} onMove={() => setMoves((count) => count + 1)} />}
-          {joined && <details><summary>Aportaciones y totales</summary>
+          {joined && !archived && <details><summary>Aportaciones y totales</summary>
             <ActiveInventory key={selection} groupId={selection} userId={userId}
               revision={revision + moves} onChange={() => setContributionChanges((count) => count + 1)} />
           </details>}
-          {!joined && !director && <p>{t("groupInventory.joinHint")}</p>}
+          {!joined && !director && !archived && <p>{t("groupInventory.joinHint")}</p>}
         </>
       )}
     </section>
