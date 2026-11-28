@@ -1,11 +1,12 @@
 import { MapRouteOverlay } from "./MapRoutes";
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { ListFilter, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { markerCategories, markerCategory } from "./atlasMarkers";
 
 const markerKey = (row) => `${row.event_type ? "event" : "poi"}-${row.id}`;
 
-export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, routes = [], places = [], markerDetails }) {
+export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, routes = [], places = [], hiddenTypes, setHiddenTypes, markerDetails }) {
   const { t } = useTranslation();
   const root = useRef(null);
   const canvas = useRef(null);
@@ -16,7 +17,13 @@ export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, l
   const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
   const [selection, setSelection] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  const active = events.find((row) => markerKey(row) === selection);
+  const visibleEvents = events.filter((row) => !hiddenTypes.includes(markerCategory(row)));
+  const active = visibleEvents.find((row) => markerKey(row) === selection);
+
+  function toggleCategory(type, visible) {
+    if (!visible && active && markerCategory(active) === type) setSelection(null);
+    setHiddenTypes((types) => visible ? types.filter((key) => key !== type) : [...types, type]);
+  }
   const fit = Math.min(size.width / image.width, size.height / image.height);
   const width = image.width * fit * view.zoom;
   const height = image.height * fit * view.zoom;
@@ -126,21 +133,37 @@ export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, l
         }} />
         <MapRouteOverlay routes={routes} places={places} />
         {tempMarker && <span className="marker marker-temp" style={{ top: `${tempMarker.latitude}%`, left: `${tempMarker.longitude}%` }} />}
-        {events.map((row) => <button key={markerKey(row)} type="button"
-          className={`marker marker-${row.event_type || row.poi_type}`}
-          style={{ top: `${row.latitude}%`, left: `${row.longitude}%` }}
+        {visibleEvents.map((row) => <button key={markerKey(row)} type="button"
+          className="marker"
+          data-marker-category={markerCategory(row)}
+          style={{ top: `${row.latitude}%`, left: `${row.longitude}%`, "--marker-paint": markerCategories[markerCategory(row)] }}
           aria-expanded={selection === markerKey(row)} aria-label={row.title} title={row.title}
           onClick={() => setSelection(selection === markerKey(row) ? null : markerKey(row))} />)}
       </div>
     </div>
-    {active && <section className="atlas-marker-detail" aria-label={active.title}>
-      <div className="row"><strong>{active.title}</strong>
-        <button type="button" aria-label={t("tracker.closeMarker")} onClick={() => setSelection(null)}><X size={17} /></button>
-      </div>
-      <small>{t(`tracker.${active.event_type || active.poi_type}`)}</small>
-      {active.description && <p>{active.description}</p>}
-      {active.image_path && <img src={active.image_path} alt={active.title} />}
-      {markerDetails?.(active)}
-    </section>}
+    <div className="atlas-overlays">
+      <details className="atlas-legend">
+        <summary><ListFilter size={16} aria-hidden="true" /> {t("shell.mapLegend")}</summary>
+        <fieldset>
+          <legend className="atlas-sr-only">{t("shell.mapCategoryFilters")}</legend>
+          {Object.entries(markerCategories).map(([type, paint]) => <label key={type}>
+            <input type="checkbox" checked={!hiddenTypes.includes(type)}
+              onChange={(event) => toggleCategory(type, event.target.checked)} />
+            <span className="atlas-legend-swatch" aria-hidden="true"
+              data-swatch-category={type} style={{ "--marker-paint": paint }} />
+            <span>{t(`shell.markerCategories.${type}`)}</span>
+          </label>)}
+        </fieldset>
+      </details>
+      {active && <section className="atlas-marker-detail" aria-label={active.title}>
+        <div className="row"><strong>{active.title}</strong>
+          <button type="button" aria-label={t("tracker.closeMarker")} onClick={() => setSelection(null)}><X size={17} /></button>
+        </div>
+        <small>{t(`tracker.${markerCategory(active)}`)}</small>
+        {active.description && <p>{active.description}</p>}
+        {active.image_path && <img src={active.image_path} alt={active.title} />}
+        {markerDetails?.(active)}
+      </section>}
+    </div>
   </div>;
 }

@@ -34,6 +34,8 @@
     "removeError": "No s’ha pogut treure el membre."
   },
   "nav": {
+    "home": "Inici",
+    "correspondence": "Correspondència",
     "language": "Idioma",
     "locations": "Localitzacions i mapes",
     "chronicle": "Crònica d’aventures",
@@ -83,6 +85,12 @@
     "addLocation": "Afegeix una localització",
     "discovered": "Localitzacions descobertes",
     "noPlaces": "Encara no hi ha localitzacions en aquest mapa.",
+    "mapLegend": "Llegenda",
+    "mapCategoryFilters": "Filtra les categories de marcadors",
+    "expandMapDescription": "Mostra la descripció completa",
+    "collapseMapDescription": "Plega la descripció",
+    "noMatchingPlaces": "Cap localització coincideix amb els filtres.",
+    "markerCategories": {"event": "Esdeveniments", "quest": "Missions", "location": "Localitzacions", "city": "Ciutats", "dungeon": "Masmorres", "landmark": "Monuments"},
     "mapControls": "Controls de l’atles",
     "zoomIn": "Apropa",
     "zoomOut": "Allunya",
@@ -155,7 +163,6 @@
     "event": "Esdeveniment",
     "addMarker": "Afegeix un marcador",
     "manageMarkers": "Gestiona els marcadors d’aquest mapa",
-    "legend": "🔵 Esdeveniments • 🟠 Missions • 🟢 Localitzacions • 🟡 Ciutats • 🟣 Masmorres • 🔷 Monuments",
     "resetView": "⟳ Restableix la vista"
   },
   "comments": {
@@ -316,7 +323,7 @@
     "mapUploaded": "S’ha pujat el mapa.",
     "mapUploadFailed": "No s’ha pogut pujar el mapa.",
     "deleteMapConfirm": "Vols eliminar aquest mapa?",
-    "manageMaps": "🗺️ Gestiona els mapes",
+    "manageMaps": "Gestiona els mapes",
     "uploadMap": "Puja un mapa nou",
     "mapName": "Nom del mapa",
     "uploadMapBtn": "Puja el mapa",
