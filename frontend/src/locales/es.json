@@ -34,6 +34,8 @@
     "removeError": "No se pudo quitar el miembro."
   },
   "nav": {
+    "calendar": "Calendario",
+    "encounters": "Encuentros",
     "home": "Inicio",
     "investigation": "Rumores e investigación",
     "correspondence": "Correspondencia",

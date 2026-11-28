@@ -374,3 +374,12 @@
 .entity-visibility fieldset input[type="checkbox"] { width: auto; }
 .dashboard-header { display: flex; flex-wrap: wrap; justify-content: space-between; }
 .dashboard .card h3 { margin-top: 0; }
+
+.encounter-status { justify-content: space-between; padding: .9rem 1rem; background: var(--surface-muted); border-inline-start: 3px solid var(--accent); }
+.encounter-status :is(h3,p) { margin: 0; }
+.encounter-roster { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem),1fr)); gap: .9rem; align-items: start; }
+.encounter-roster > [data-current="true"] { border-block-start: 3px solid var(--accent); }
+.encounter-roster h4 { margin: 0; }
+.turn-label { color: var(--heading-color, var(--accent)); font-weight: 700; }
+.combat-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5rem),1fr)); gap: .7rem; }
+.combat-stats input { min-width: 0; }

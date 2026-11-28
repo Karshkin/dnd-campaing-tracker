@@ -34,6 +34,8 @@
     "removeError": "No s’ha pogut treure el membre."
   },
   "nav": {
+    "calendar": "Calendari",
+    "encounters": "Trobades",
     "home": "Inici",
     "investigation": "Rumors i investigació",
     "correspondence": "Correspondència",
