@@ -435,7 +435,7 @@ try {
   await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
 
-  const encounter = ok(await director.from("encounters").insert({ title: "Batalla de prueba", session_id: session.id, experience: 50 }).select("id").single());
+  const encounter = ok(await director.from("encounters").insert({ title: "Batalla de prueba", session_id: session.id, experience: 50, rewards: "Tesoro reservado" }).select("id").single());
   const step = (client, action, expected, loot = []) =>
     client.rpc("encounter_step", { target: encounter.id, action, expected, loot });
   await insert(director, "encounter_combatants", {
@@ -447,6 +447,10 @@ try {
   assert.deepEqual(ok(await member.rpc("visible_encounter_turns", { target: encounter.id })), []);
   assert.ok((await step(member, "start", 0)).error);
   ok(await step(director, "start", 0));
+  const encounterList = ok(await member.rpc("visible_encounters"));
+  assert.equal(encounterList.find(({ id }) => id === encounter.id).rewards,null);
+  assert.equal(ok(await member.from("encounters").select("id").eq("id",encounter.id)).length,0);
+  assert.deepEqual(ok(await outside.rpc("visible_encounters")),[]);
   const turns = ok(await member.rpc("visible_encounter_turns", { target: encounter.id }));
   assert.deepEqual(turns.map(({ id, name }) => [id,name]), [[publicUnit.id,character.name]]);
   assert.ok(!Object.hasOwn(turns[0],"hp"));
@@ -464,6 +468,7 @@ try {
   assert.equal(await wallet(member, "group_id", group), currentCoins + deposit.quantity);
   assert.equal(ok(await director.from("treasury_history").select("encounter_id").eq("encounter_id",encounter.id).single()).encounter_id, encounter.id);
   assert.ok((await step(director, "complete", 3, [deposit])).error);
+  assert.equal(ok(await member.rpc("visible_encounters")).find(({ id }) => id === encounter.id).rewards,"Tesoro reservado");
 
   const legacy = new URL(base);
   legacy.hash = "/resources";

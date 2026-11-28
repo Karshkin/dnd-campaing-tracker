@@ -2,10 +2,12 @@ import { useCallback, useState } from "react";
 import { campaignChronicle, groupInventory, supabase } from "./campaign";
 import { SelectRow, useCampaignMutation, useCampaignQuery } from "./ChronicleControls";
 import { MovementEditor } from "./Treasury";
+import { PageHeader } from "./CampaignShell";
+import { encounterBudget } from "./encounterBudget";
 import { VisibilityEditor } from "./VisibilityEditor";
 
 const phases = { prepared: "Preparado", running: "En combate", completed: "Finalizado" };
-const conditions = ["Agarrado", "Asustado", "Aturdido", "Cegado", "Derribado", "Ensordecido", "Envenenado", "Hechizado",
+const conditions = ["Agotamiento", "Agarrado", "Asustado", "Aturdido", "Cegado", "Derribado", "Ensordecido", "Envenenado", "Hechizado",
   "Incapacitado", "Inconsciente", "Invisible", "Paralizado", "Petrificado", "Restringido"];
 
 async function value(query) {
@@ -124,7 +126,7 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
   const mutation = useCampaignMutation(async () => { await onChange(); await refresh(); });
   const [group, setGroup] = useState("");
   const [loot, setLoot] = useState([]);
-  const [budget, setBudget] = useState(0);
+
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Cargando orden de turnos…</p>;
   const { units, turns } = data;
@@ -134,7 +136,8 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
   })));
   const players = characters.filter(({ id }) => units.some(({ character_id }) => character_id === id));
   const xp = units.filter(({ character_id }) => !character_id).reduce((sum, unit) => sum + unit.experience, 0);
-  const combinedBudget = budget * players.length;
+  const [low,moderate,high] = encounterBudget(players.map(({ level }) => level));
+  const difficulty = xp <= low ? "Baja" : xp <= moderate ? "Moderada" : xp <= high ? "Alta" : "Supera el presupuesto alto";
   return <section className="chronicle-flow">
     <h3>{row.title}</h3>
     <p>{phases[row.phase]}{row.round > 0 && ` · Ronda ${row.round}`}</p>
@@ -147,10 +150,10 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
           onSave={(draft) => mutation.run(() => value(supabase.from("encounter_combatants").insert(draft)))} />
       </details>}
       <p>{players.length} participantes{players.length > 0 && ` · niveles ${players.map(({ level }) => level).join(", ")}`} · {xp} PX de enemigos</p>
-      {players.length > 0 && <label>Presupuesto orientativo de PX por participante
-        <input type="number" min={0} value={budget} onChange={(event) => setBudget(Number(event.target.value))} />
-      </label>}
-      {combinedBudget > 0 && <p>{xp > combinedBudget ? "Por encima" : "Dentro"} del presupuesto de {combinedBudget} PX.</p>}
+      {players.length > 0 && <div className="chronicle-panel">
+        <h4>Dificultad estimada · {difficulty}</h4>
+        <p>Presupuesto D&amp;D 2024 · Baja {low} PX · Moderada {moderate} PX · Alta {high} PX</p>
+      </div>}
       {row.phase === "prepared" && <button type="button" disabled={!units.length || mutation.busy} onClick={() => step("start")}>Iniciar combate</button>}
       {row.phase === "running" && <>
         <button type="button" disabled={mutation.busy || !units.length} onClick={() => step("next")}>Siguiente turno</button>
@@ -179,7 +182,8 @@ function LootForm({ group, busy, onAdd }) {
 export function Encounters({ director, characters, creatures }) {
   const load = useCallback(async () => {
     const [encounters, sessions, locations, groups] = await Promise.all([
-      value(supabase.from("encounters").select("id,title,phase,round,revision,experience,rewards,session_id,place_id").order("title")),
+      director ? value(supabase.from("encounters").select("id,title,phase,round,revision,experience,rewards,session_id,place_id").order("title"))
+        : value(supabase.rpc("visible_encounters")),
       director ? campaignChronicle.list("chronicle_sessions", "played_on") : [],
       director ? campaignChronicle.list("points_of_interest", "title") : [],
       director ? groupInventory.groups() : { groups: [] },
@@ -192,8 +196,8 @@ export function Encounters({ director, characters, creatures }) {
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Cargando encuentros…</p>;
   const row = data.encounters.find(({ id }) => id === selection) ?? data.encounters[0];
-  return <article className="card chronicle-flow">
-    <h2>Encuentros</h2>
+  return <article className="chronicle-flow encounter-page">
+    <PageHeader title="Encuentros" />
     {mutation.error && <p role="alert">{mutation.error}</p>}
     {director && <details><summary>Nuevo encuentro</summary>
       <EncounterEditor sessions={data.sessions} locations={data.locations} busy={mutation.busy} onSave={(draft) =>

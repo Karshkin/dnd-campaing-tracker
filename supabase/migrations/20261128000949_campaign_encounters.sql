@@ -45,14 +45,7 @@ grant insert(title,session_id,place_id,experience,rewards),update(title,session_
 grant insert(encounter_id,name,creature_id,character_id,initiative,maximum_hp,hp,temporary_hp,experience,conditions,notes,player_visible),
  update(name,initiative,maximum_hp,hp,temporary_hp,experience,conditions,notes,player_visible),delete on public.encounter_combatants to authenticated;
 create policy encounter_read on public.encounters for select to authenticated
-using(campaign_id = (select campaign_private.selected_campaign()) and (
-  campaign_private.is_campaign_director(campaign_id) or (
-    phase <> 'prepared' and campaign_private.permitted_in(campaign_id,'tracker',1)
-    and campaign_private.can_discover(campaign_id,'encounters',id::text)
-    and (session_id is null or exists(select 1 from public.chronicle_sessions s where s.id = session_id))
-    and (place_id is null or exists(select 1 from public.points_of_interest p where p.id = place_id))
-  )
-));
+using(campaign_id=(select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id));
 create policy encounter_insert on public.encounters for insert to authenticated
 with check(campaign_id = (select campaign_private.selected_campaign()) and campaign_private.is_campaign_director(campaign_id));
 create policy encounter_update on public.encounters for update to authenticated
@@ -78,6 +71,46 @@ revoke all on function campaign_private.combatant_phase() from public,anon,authe
 create trigger combatants_open before insert or update or delete on public.encounter_combatants
 for each row execute function campaign_private.combatant_phase();
 
+create function campaign_private.encounter_visible(c uuid,target uuid) returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select auth.uid() is not null and c=campaign_private.selected_campaign() and exists(
+    select 1 from public.encounters e where (e.campaign_id,e.id)=(c,target)
+      and (campaign_private.is_campaign_director(c) or (
+        e.phase <> 'prepared' and campaign_private.permitted_in(c,'tracker',1)
+        and campaign_private.can_discover(c,'encounters',e.id::text)
+        and (e.session_id is null or exists(select 1 from public.chronicle_sessions s
+          where (s.campaign_id,s.id)=(c,e.session_id) and s.status in ('published','closed')))
+        and (e.place_id is null or exists(select 1 from public.points_of_interest p
+          where (p.campaign_id,p.id)=(c,e.place_id)
+            and campaign_private.can_discover(c,'points_of_interest',p.id::text)
+            and (p.map_id is null or campaign_private.can_discover(c,'maps',p.map_id::text))))
+      ))
+  );
+$$;
+revoke all on function campaign_private.encounter_visible(uuid,uuid) from public,anon,authenticated;
+grant execute on function campaign_private.encounter_visible(uuid,uuid) to authenticated;
+
+create function campaign_private.visible_encounters() returns jsonb
+language sql stable security definer set search_path = ''
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',e.id,'title',e.title,'phase',e.phase,'round',e.round,'revision',e.revision,
+    'experience',case when e.phase='completed' then e.experience end,
+    'rewards',case when e.phase='completed' then e.rewards end,
+    'session_id',e.session_id,'place_id',e.place_id
+  ) order by e.title,e.id),'[]'::jsonb)
+  from public.encounters e
+  where e.campaign_id=campaign_private.selected_campaign() and campaign_private.encounter_visible(e.campaign_id,e.id);
+$$;
+revoke all on function campaign_private.visible_encounters() from public,anon,authenticated;
+grant execute on function campaign_private.visible_encounters() to authenticated;
+create function public.visible_encounters() returns jsonb
+language sql stable security invoker set search_path = ''
+as $$ select campaign_private.visible_encounters(); $$;
+revoke all on function public.visible_encounters() from public,anon,authenticated;
+grant execute on function public.visible_encounters() to authenticated;
+
 create function campaign_private.visible_encounter_turns(target uuid) returns jsonb
 language sql stable security definer set search_path = ''
 as $$
@@ -85,16 +118,8 @@ as $$
     order by u.initiative desc,u.id),'[]'::jsonb)
   from public.encounters e join public.encounter_combatants u on u.encounter_id = e.id
   where e.id = target and e.campaign_id = campaign_private.selected_campaign()
-    and campaign_private.permitted_in(e.campaign_id,'tracker',1)
-    and (campaign_private.is_campaign_director(e.campaign_id) or (
-      u.player_visible and e.phase <> 'prepared' and campaign_private.can_discover(e.campaign_id,'encounters',e.id::text)
-      and (e.session_id is null or exists(select 1 from public.chronicle_sessions s where s.id = e.session_id and s.status <> 'draft'))
-      and (e.place_id is null or (
-        campaign_private.can_discover(e.campaign_id,'points_of_interest',e.place_id::text)
-        and exists(select 1 from public.points_of_interest p where p.id = e.place_id
-          and campaign_private.can_discover(e.campaign_id,'maps',p.map_id::text))
-      ))
-    ));
+    and campaign_private.encounter_visible(e.campaign_id,e.id)
+    and (u.player_visible or campaign_private.is_campaign_director(e.campaign_id));
 $$;
 revoke all on function campaign_private.visible_encounter_turns(uuid) from public,anon,authenticated;
 grant execute on function campaign_private.visible_encounter_turns(uuid) to authenticated;
@@ -106,7 +131,7 @@ grant execute on function public.visible_encounter_turns(uuid) to authenticated;
 alter table public.treasury_history add column encounter_id uuid,
 add foreign key(campaign_id,encounter_id) references public.encounters(campaign_id,id) on delete set null(encounter_id);
 create policy treasury_encounter_visibility on public.treasury_history as restrictive for select to authenticated
-using(encounter_id is null or exists(select 1 from public.encounters e where e.id = encounter_id));
+using(encounter_id is null or campaign_private.encounter_visible(campaign_id,encounter_id));
 create or replace function campaign_private.record_treasury(c uuid, party integer, target integer,
   session uuid, operation text, item text, quantity bigint, coin public.coin_denomination)
 returns void language sql security invoker set search_path = ''
