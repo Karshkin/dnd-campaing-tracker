@@ -80,15 +80,25 @@ try {
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
   const secondNpc = await insert(director, "allies", { name: "Capitana" });
   const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
-  const map = await insert(director, "maps", { name: "Costa" });
-  const mapPath = `maps/${map.id}/${randomUUID()}.png`;
+  const map = await insert(director, "maps", { name: "Costa de la Espada" });
+  const longMap = await insert(director, "maps", { name: "Greenest", description: "La villa se extiende junto al río. ".repeat(22) });
+  const shortMap = await insert(director, "maps", { name: "Puerto", description: "La costa al amanecer." });
   const dot = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64");
-  ok(await director.storage.from("campaign-files").upload(mapPath, new Blob([dot], { type: "image/png" })));
-  cleanup.push(() => admin.storage.from("campaign-files").remove([mapPath]));
-  ok(await director.from("maps").update({ is_active: true, file_path: mapPath }).eq("id", map.id));
+  for (const record of [map, longMap, shortMap]) {
+    const mapPath = `maps/${record.id}/${randomUUID()}.png`;
+    ok(await director.storage.from("campaign-files").upload(mapPath, new Blob([dot], { type: "image/png" })));
+    cleanup.push(() => admin.storage.from("campaign-files").remove([mapPath]));
+    ok(await director.from("maps").update({ is_active: true, file_path: mapPath }).eq("id", record.id));
+  }
   const places = await Promise.all(["Faro viejo", "Embarcadero"].map((title) => insert(director, "points_of_interest", {
     title, map_id: map.id, latitude: 10, longitude: 10,
   })));
+  await Promise.all(Object.entries({
+    city: "Ciudad de prueba", dungeon: "Mazmorra de prueba", landmark: "Monumento de prueba", quest: "Misión de prueba",
+  }).map(([poi_type,title], n) => insert(director,"points_of_interest",{
+    title, poi_type, map_id: map.id, latitude: 30+n*10, longitude: 30+n*10,
+  })));
+  await insert(director,"map_events",{ title: "Evento de prueba", event_type: "event", map_id: map.id, latitude: 25, longitude: 50 });
   const foreignNpc = await insert(other, "allies", { name: "Vigía remoto", alignment: "neutral" });
   const chapter = await insert(director, "chronicle_chapters", { title: "El faro" });
   const foreignChapter = await insert(other, "chronicle_chapters", { title: "Otro faro" });
@@ -219,6 +229,64 @@ try {
   await page.getByRole("button", { name: "Expandir navegación" }).click();
   await page.getByRole("button", { name: "Localizaciones y mapas", exact: true }).click();
   await page.getByRole("heading", { name: "Atlas de campaña", exact: true }).waitFor();
+  const headingActions = page.locator(".atlas-page .page-actions");
+  const controls = headingActions.locator("select,button");
+  const positions = () => controls.evaluateAll((nodes) => nodes.map((node) => {
+    const { x,y,width,height } = node.getBoundingClientRect();
+    return [x + window.scrollX,y + window.scrollY,width,height];
+  }));
+  await headingActions.getByLabel("Mapa",{ exact: true }).selectOption(String(map.id));
+  const firstPositions = await positions();
+  assert.equal(firstPositions.length,3);
+  assert.equal(await page.locator(".atlas-description").count(),0);
+  await headingActions.getByLabel("Mapa",{ exact: true }).selectOption(String(shortMap.id));
+  await page.getByText(shortMap.description,{ exact: true }).waitFor();
+  assert.deepEqual(await positions(),firstPositions);
+  assert.equal(await page.getByRole("button",{ name: "Ver descripción completa" }).count(),0);
+  await headingActions.getByLabel("Mapa",{ exact: true }).selectOption(String(longMap.id));
+  const readMore = page.getByRole("button",{ name: "Ver descripción completa" });
+  await readMore.waitFor();
+  assert.deepEqual(await positions(),firstPositions);
+  await readMore.click();
+  assert.deepEqual(await positions(),firstPositions);
+  await page.getByRole("button",{ name: "Contraer descripción" }).click();
+  await headingActions.getByLabel("Mapa",{ exact: true }).selectOption(String(map.id));
+  const legend = page.locator(".atlas-legend");
+  await legend.locator("summary").click();
+  const colors = {
+    event: ["rgb(91, 155, 213)", "rgb(30, 95, 168)"], quest: ["rgb(255, 197, 90)", "rgb(217, 123, 16)"],
+    location: ["rgb(114, 194, 114)", "rgb(46, 125, 50)"], city: ["rgb(255, 224, 130)", "rgb(199, 154, 0)"],
+    dungeon: ["rgb(156, 114, 214)", "rgb(81, 45, 168)"], landmark: ["rgb(78, 205, 196)", "rgb(0, 121, 107)"],
+  };
+  for (const [kind, [center, edge]] of Object.entries(colors)) {
+    const pin = page.locator(`[data-marker-category="${kind}"]`).first();
+    await pin.waitFor();
+    const paint = await pin.evaluate((node) => getComputedStyle(node).backgroundImage);
+    assert.equal(paint,`radial-gradient(circle, ${center} 0%, ${edge} 100%)`);
+    assert.equal(paint,await legend.locator(`[data-swatch-category="${kind}"]`)
+      .evaluate((node) => getComputedStyle(node).backgroundImage));
+  }
+  const locationFilter = legend.getByRole("checkbox",{ name: "Localizaciones", exact: true });
+  await locationFilter.uncheck();
+  assert.equal(await page.locator('[data-marker-category="location"]').count(),0);
+  assert.equal(await page.locator(".atlas-places").getByRole("button",{ name: /Faro viejo/ }).count(),0);
+  await locationFilter.check();
+  assert.equal(await page.locator('[data-marker-category="location"]').count(),2);
+  const accountMenu = page.locator('summary[aria-label="Cuenta y preferencias"]');
+  await accountMenu.click();
+  const language = page.locator(".language-setting select");
+  await language.selectOption("en");
+  await legend.getByRole("checkbox",{ name: "Dungeons", exact: true }).waitFor();
+  await language.selectOption("ca");
+  await legend.getByRole("checkbox",{ name: "Masmorres", exact: true }).waitFor();
+  await language.selectOption("es");
+  await accountMenu.click();
+  await legend.locator("summary").click();
+  assert.equal(await locationFilter.isVisible(),false);
+  const plane = page.locator(".atlas-image-plane");
+  const beforePan = await plane.evaluate((node) => Number.parseFloat(node.style.left));
+  await page.locator(".atlas-canvas").press("ArrowLeft");
+  assert.ok(Math.abs(await plane.evaluate((node) => Number.parseFloat(node.style.left)) - beforePan - 32) < 0.01);
   await page.locator(".atlas-places").getByRole("button", { name: /Faro viejo/ }).click();
   await page.getByRole("region", { name: "Faro viejo" }).waitFor();
   await page.getByRole("button", { name: "Cerrar punto del mapa" }).click();
