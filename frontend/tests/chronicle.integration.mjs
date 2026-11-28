@@ -474,11 +474,11 @@ try {
   assert.equal(ok(await member.from("inventory_groups").select("name").eq("id", group).single()).name, "Exploradores del faro");
   const impact = ok(await manageGroup(director, "impact", group));
   assert.equal(impact.members, 1);
-  assert.equal(impact.coins.gp, 4);
+  assert.equal(impact.coins.gp, currentCoins + deposit.quantity);
   assert.ok(impact.history > 0);
   ok(await manageGroup(director, "archive", group));
   assert.ok((await movement(member, deposit)).error);
-  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(await wallet(member, "group_id", group), currentCoins + deposit.quantity);
   assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
 
   console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");
