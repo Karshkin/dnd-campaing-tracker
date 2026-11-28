@@ -16,10 +16,17 @@ async function read(query) {
   return data;
 }
 
-export function Dashboard({ director, characters, navigate }) {
+async function optional(query) {
+  const { data, error } = await query;
+  if (["PGRST202","PGRST205","42P01"].includes(error?.code)) return null;
+  if (error) throw error;
+  return data;
+}
+
+export function Dashboard({ director, characters, navigate, views }) {
   const load = useCallback(async () => {
     const today = new Date().toLocaleDateString("sv-SE");
-    const [sessions, quests, diary, wallets, factions, groups, activity] = await Promise.all([
+    const [sessions, quests, diary, wallets, factions, groups, activity, encounters, clock, letters, secrets] = await Promise.all([
       read(supabase.from("chronicle_sessions").select("id,title,played_on,status").gte("played_on", today)
         .neq("status", "closed").order("played_on").limit(1)),
       read(supabase.from("chronicle_quests").select("id,title,status").eq("status", "active").order("title").limit(5)),
@@ -28,12 +35,18 @@ export function Dashboard({ director, characters, navigate }) {
       read(supabase.from("faction_reputation").select("score,organization_id,group_id").neq("score", 0).limit(8)),
       read(supabase.from("inventory_groups").select("id,name").order("name").limit(30)),
       read(supabase.from("campaign_activity").select("id,entity_kind,action,occurred_at").order("occurred_at", { ascending: false }).limit(12)),
+      optional(supabase.rpc("visible_encounters")),
+      optional(supabase.from("harptos_clock").select("world_day").maybeSingle()),
+      optional(supabase.from("campaign_documents").select("id,title").order("created_at",{ ascending: false }).limit(3)),
+      director ? optional(supabase.from("entity_secrets").select("id,label,kind").eq("audience","director").order("label").limit(8)) : null,
     ]);
     const organizationIds = [...new Set(factions.map(({ organization_id }) => organization_id))];
     const organizations = organizationIds.length
       ? await read(supabase.from("organizations").select("id,name").in("id", organizationIds)) : [];
-    return { sessions, quests, diary, wallets, factions, groups, activity, organizations };
-  }, []);
+    const calendar = clock ? await optional(supabase.from("harptos_events").select("id,title,world_day,kind")
+      .gte("world_day",clock.world_day).order("world_day").limit(3)) : null;
+    return { sessions, quests, diary, wallets, factions, groups, activity, organizations, encounters, calendar, letters, secrets };
+  }, [director]);
   const { data, error, refresh } = useCampaignQuery(load);
   if (error) return <section className="card"><p role="alert">{error}</p><button onClick={refresh}>Reintentar</button></section>;
   if (!data) return <section className="card"><p role="status">Cargando inicio…</p></section>;
@@ -73,6 +86,25 @@ export function Dashboard({ director, characters, navigate }) {
           </li>
         ))}</ul> : <p>No hay cambios visibles de reputación.</p>}
       </section>
+      {data.encounters && <section className="card"><h3>Encuentros</h3>
+        {data.encounters.length ? <ul>{data.encounters.slice(0,5).map(({ id,title,phase,round }) => (
+          <li key={id}>{title} · {phase === "running" ? `Ronda ${round}` : phase === "completed" ? "Finalizado" : "Preparado"}</li>
+        ))}</ul> : <p>No hay encuentros visibles.</p>}
+        {views.includes("encounters") && <button type="button" onClick={() => navigate("encounters")}>Abrir encuentros</button>}
+      </section>}
+      {data.calendar && <section className="card"><h3>Próximos acontecimientos</h3>
+        {data.calendar.length ? <ul>{data.calendar.map(({ id,title }) => <li key={id}>{title}</li>)}</ul>
+          : <p>No hay acontecimientos próximos.</p>}
+        {views.includes("calendar") && <button type="button" onClick={() => navigate("calendar")}>Abrir calendario</button>}
+      </section>}
+      {data.letters && <section className="card"><h3>Correspondencia reciente</h3>
+        {data.letters.length ? <ul>{data.letters.map(({ id,title }) => <li key={id}>{title}</li>)}</ul> : <p>No hay documentos visibles.</p>}
+        {views.includes("correspondence") && <button type="button" onClick={() => navigate("correspondence")}>Abrir correspondencia</button>}
+      </section>}
+      {data.secrets && <section className="card"><h3>Información pendiente de revelar</h3>
+        {data.secrets.length ? <ul>{data.secrets.map(({ id,label }) => <li key={id}>{label}</li>)}</ul>
+          : <p>Las fichas carecen de notas reservadas.</p>}
+      </section>}
       <section className="card wide"><h3>Actividad reciente</h3>
         {data.activity.length ? <ul>{data.activity.map(({ id, entity_kind, action, occurred_at }) => (
           <li key={id}>{sourceLabels[entity_kind]} · {actionLabels[action]} · {dateLabel(occurred_at)}</li>
