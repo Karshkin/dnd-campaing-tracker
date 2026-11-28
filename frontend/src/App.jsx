@@ -1072,7 +1072,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       )}
 
       {activeView === "encounters" && isAuthenticated && hasPagePermission("tracker") &&
-        <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} />}
+        <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} npcs={allies} />}
 
       {/* Campaign atlas */}
       {activeView === "tracker" && canManageAdmin && manageMapsOpen && (

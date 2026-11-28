@@ -39,10 +39,10 @@ function EncounterEditor({ sessions, locations, busy, onSave }) {
   </form>;
 }
 
-function CombatantEditor({ encounter, characters, creatures, busy, onSave }) {
+function CombatantEditor({ encounter, characters, creatures, npcs, busy, onSave }) {
   const [origin, setOrigin] = useState("");
   const [target, setTarget] = useState("");
-  const units = origin === "character" ? characters : creatures;
+  const units = { character: characters, creature: creatures, npc: npcs }[origin] ?? [];
   const selected = units.find(({ id }) => id === Number(target));
   return <form className="form" onSubmit={async (event) => {
     event.preventDefault();
@@ -55,12 +55,13 @@ function CombatantEditor({ encounter, characters, creatures, busy, onSave }) {
     if (await onSave(Array.from({ length: count }, (_, index) => ({
       encounter_id: encounter.id, name: count === 1 ? name : `${name} ${index + 1}`,
       creature_id: origin === "creature" ? selected?.id : null, character_id: origin === "character" ? selected?.id : null,
+      npc_id: origin === "npc" ? selected?.id : null,
       initiative: Number(fields.get("initiative")), maximum_hp: hp, hp, player_visible: fields.has("visible"),
       experience: Number(fields.get("experience")), notes: fields.get("notes"),
     })))) form.reset();
   }}>
     <div className="chronicle-actions">
-      <SelectRow label="Origen" rows={[{ id: "creature", name: "Bestiario" }, { id: "character", name: "Personaje" }]}
+      <SelectRow label="Origen" rows={[{ id: "creature", name: "Bestiario" }, { id: "character", name: "Personaje" }, { id: "npc", name: "PNJ individual" }]}
         value={origin} onChange={(next) => { setOrigin(next); setTarget(""); }} empty="Combatiente individual" />
       {origin && <SelectRow label="Ficha de origen" rows={units} value={target} onChange={setTarget} empty="Selecciona una ficha" required />}
       <label>Nombre <input name="name" maxLength={110} required={!selected} /></label>
@@ -78,10 +79,12 @@ function CombatantEditor({ encounter, characters, creatures, busy, onSave }) {
 }
 
 function Combatants({ rows, active, complete, creatures, mutation }) {
-  return <ul className="chronicle-list">{rows.map((unit) => {
+  return <ul className="chronicle-list encounter-roster">{rows.map((unit) => {
     const stats = creatures.find(({ id }) => id === unit.creature_id);
-    return <li key={unit.id} className="chronicle-panel">
-      <h4>{unit.id === active && "Turno · "}{unit.name}</h4>
+    return <li key={unit.id} className="chronicle-panel" data-current={unit.id === active}>
+      <div className="row"><h4>{unit.name}</h4>
+        {unit.id === active && <span className="turn-label">Turno actual</span>}
+      </div>
       {stats && <p>CA {stats.armor_class} · VD {stats.challenge_rating} · {stats.abilities}</p>}
       <form className="form" key={JSON.stringify(unit)} onSubmit={(event) => {
         event.preventDefault();
@@ -94,7 +97,7 @@ function Combatants({ rows, active, complete, creatures, mutation }) {
         mutation.run(() => value(supabase.from("encounter_combatants").update(changes).eq("id", unit.id).select("id").single()));
       }}>
         <fieldset disabled={complete || mutation.busy}>
-          <div className="chronicle-actions">
+          <div className="combat-stats">
             <label>Iniciativa <input name="initiative" type="number" required defaultValue={unit.initiative} /></label>
             <label>PG actuales <input name="hp" type="number" min={0} max={1000000} required defaultValue={unit.hp} /></label>
             <label>PG máximos <input name="maximum" type="number" min={1} max={1000000} required defaultValue={unit.maximum_hp} /></label>
@@ -114,7 +117,7 @@ function Combatants({ rows, active, complete, creatures, mutation }) {
   })}</ul>;
 }
 
-function Encounter({ row, director, characters, creatures, groups, onChange }) {
+function Encounter({ row, director, characters, creatures, npcs, groups, onChange }) {
   const load = useCallback(async () => {
     const [turns, units] = await Promise.all([
       value(supabase.rpc("visible_encounter_turns", { target: row.id })),
@@ -130,7 +133,8 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Cargando orden de turnos…</p>;
   const { units, turns } = data;
-  const active = turns.find(({ current }) => current)?.id;
+  const currentTurn = turns.find(({ current }) => current);
+  const active = currentTurn?.id;
   const step = (action) => mutation.run(() => value(supabase.rpc("encounter_step", {
     target: row.id, action, expected: row.revision, loot: action === "complete" ? loot : [],
   })));
@@ -139,14 +143,21 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
   const [low,moderate,high] = encounterBudget(players.map(({ level }) => level));
   const difficulty = xp <= low ? "Baja" : xp <= moderate ? "Moderada" : xp <= high ? "Alta" : "Supera el presupuesto alto";
   return <section className="chronicle-flow">
-    <h3>{row.title}</h3>
-    <p>{phases[row.phase]}{row.round > 0 && ` · Ronda ${row.round}`}</p>
+    <header className="encounter-status row">
+      <div>
+        <h3>{row.title}</h3>
+        <p>{phases[row.phase]}{row.round > 0 && ` · Ronda ${row.round}`}
+          {currentTurn && ` · Turno de ${currentTurn.name}`}</p>
+      </div>
+      {director && row.phase === "running" && <button type="button" className="primary-action"
+        disabled={mutation.busy || !units.length} onClick={() => step("next")}>Siguiente turno</button>}
+    </header>
     {mutation.error && <p role="alert">{mutation.error}</p>}
     {!director && <ol>{turns.map((turn) => <li key={turn.id}>{turn.current && "Turno · "}{turn.name} · {turn.initiative}</li>)}</ol>}
     {row.phase === "completed" && <p>{row.experience} PX · {row.rewards}</p>}
     {director && <>
       {row.phase !== "completed" && <details><summary>Añadir combatientes</summary>
-        <CombatantEditor encounter={row} characters={characters} creatures={creatures} busy={mutation.busy}
+        <CombatantEditor encounter={row} characters={characters} creatures={creatures} npcs={npcs} busy={mutation.busy}
           onSave={(draft) => mutation.run(() => value(supabase.from("encounter_combatants").insert(draft)))} />
       </details>}
       <p>{players.length} participantes{players.length > 0 && ` · niveles ${players.map(({ level }) => level).join(", ")}`} · {xp} PX de enemigos</p>
@@ -156,7 +167,6 @@ function Encounter({ row, director, characters, creatures, groups, onChange }) {
       </div>}
       {row.phase === "prepared" && <button type="button" disabled={!units.length || mutation.busy} onClick={() => step("start")}>Iniciar combate</button>}
       {row.phase === "running" && <>
-        <button type="button" disabled={mutation.busy || !units.length} onClick={() => step("next")}>Siguiente turno</button>
         <details><summary>Cierre y botín</summary>
           <SelectRow label="Grupo que recibe el botín" rows={groups} value={group} onChange={setGroup} empty="Selecciona un grupo" />
           {group && <LootForm group={Number(group)} busy={mutation.busy} onAdd={(movement) => setLoot([...loot,movement])} />}
@@ -179,7 +189,7 @@ function LootForm({ group, busy, onAdd }) {
     onAdd={(movement) => { onAdd(movement); return true; }} />;
 }
 
-export function Encounters({ director, characters, creatures }) {
+export function Encounters({ director, characters, creatures, npcs }) {
   const load = useCallback(async () => {
     const [encounters, sessions, locations, groups] = await Promise.all([
       director ? value(supabase.from("encounters").select("id,title,phase,round,revision,experience,rewards,session_id,place_id").order("title"))
@@ -209,7 +219,7 @@ export function Encounters({ director, characters, creatures }) {
     {row ? <>
       <SelectRow label="Encuentro" rows={data.encounters} value={row.id} onChange={setSelection} />
       <Encounter key={row.id} row={row} director={director} characters={characters} creatures={creatures}
-        groups={data.groups} onChange={refresh} />
+        npcs={npcs} groups={data.groups} onChange={refresh} />
     </> : <p>No hay encuentros visibles.</p>}
   </article>;
 }
