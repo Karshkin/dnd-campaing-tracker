@@ -65,6 +65,14 @@
     "expand": "Expandir navegación",
     "collapse": "Contraer navegación"
   },
+  "choices": {
+    "search": "Buscar",
+    "selected": "{{count}} seleccionados",
+    "unavailable": "Elemento #{{id}}",
+    "remove": "Quitar {{name}}",
+    "all": "Seleccionar toda la asistencia",
+    "empty": "No hay coincidencias"
+  },
   "common": {
     "loading": "Cargando…",
     "title": "Título",

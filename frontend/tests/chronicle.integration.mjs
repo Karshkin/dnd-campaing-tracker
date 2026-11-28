@@ -78,6 +78,12 @@ try {
   const character = await insert(member, "characters", { name: "Niebla" });
   const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
+  const secondNpc = await insert(director, "allies", { name: "Capitana" });
+  const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
+  const map = await insert(director, "maps", { name: "Costa" });
+  const places = await Promise.all(["Faro viejo", "Embarcadero"].map((title) => insert(director, "points_of_interest", {
+    title, map_id: map.id, latitude: 10, longitude: 10,
+  })));
   const foreignNpc = await insert(other, "allies", { name: "Vigía remoto", alignment: "neutral" });
   const chapter = await insert(director, "chronicle_chapters", { title: "El faro" });
   const foreignChapter = await insert(other, "chronicle_chapters", { title: "Otro faro" });
@@ -89,6 +95,8 @@ try {
   assert.ok((await action(member, "save_session", sessionDraft)).error);
   assert.ok((await action(director, "save_session", { ...sessionDraft, chapter_id: foreignChapter.id })).error);
   assert.ok((await action(director, "save_session", { ...sessionDraft, links: [{ npc_id: foreignNpc.id }] })).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, attendance: [character.id, character.id] })).error);
+  assert.ok((await action(director, "save_session", { ...sessionDraft, links: [{ npc_id: npc.id }, { npc_id: npc.id }] })).error);
   ok(await action(director, "save_session", sessionDraft));
   const session = ok(await director.from("chronicle_sessions").select().single());
   ok(await director.from("chronicle_sessions").update({
@@ -170,6 +178,7 @@ try {
   assert.deepEqual(ok(await member.from("chronicle_notes").select()), []);
   assert.equal(ok(await director.from("treasury_history").select().eq("operation", "distribution").single()).author_id, dm.user.id);
 
+  const resource = await insert(director, "resources", { name: "Suministro anterior", quantity: 4, notes: "Existente" });
   const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
     entity_kind, target: String(id), visibility: mode, recipients,
   });
@@ -256,8 +265,39 @@ try {
   await page.getByLabel("Fecha", { exact: true }).fill("2026-11-27");
   await page.getByRole("textbox", { name: "Resumen", exact: true }).fill("Al alba");
   await page.getByLabel("Notas privadas del director", { exact: true }).fill("Solo DM");
+  const attendancePicker = page.getByRole("group", { name: "Asistencia" });
+  await attendancePicker.getByRole("button", { name: "Seleccionar toda la asistencia" }).click();
+  const organizationPicker = page.getByRole("group", { name: "Organizaciones", exact: true });
+  await organizationPicker.getByRole("checkbox", { name: faction.name }).check();
+  await organizationPicker.getByRole("searchbox").fill(secondFaction.name);
+  await organizationPicker.getByRole("checkbox", { name: secondFaction.name }).focus();
+  await page.keyboard.press("Space");
+  assert.equal(await organizationPicker.getByText("2 seleccionados", { exact: true }).count(), 1);
+  const otherPickers = [
+    ["PNJ", [npc.name, secondNpc.name]],
+    ["Criaturas", creatures.map(({ name }) => name)],
+    ["Lugares", places.map(({ title }) => title)],
+  ];
+  for (const [name, options] of otherPickers) {
+    const picker = page.getByRole("group", { name, exact: true });
+    for (const option of options) await picker.getByRole("checkbox", { name: option, exact: true }).check();
+  }
   await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
   await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Editar sesión" }).click();
+  assert.equal(await attendancePicker.getByRole("checkbox", { checked: true }).count(), 2);
+  assert.equal(await organizationPicker.getByRole("checkbox", { checked: true }).count(), 2);
+  for (const [name] of otherPickers) {
+    assert.equal(await page.getByRole("group", { name, exact: true }).getByRole("checkbox", { checked: true }).count(), 2);
+  }
+  await organizationPicker.getByRole("button", { name: `Quitar ${secondFaction.name}` }).click();
+  await page.getByRole("button", { name: "Guardar sesión", exact: true }).click();
+  await page.getByRole("button", { name: "Guardar sesión", exact: true }).waitFor({ state: "hidden" });
+  const epilogue = ok(await director.from("chronicle_sessions").select("id").eq("title", "Epílogo").single());
+  assert.deepEqual(ok(await director.from("chronicle_links").select("organization_id").eq("session_id", epilogue.id).not("organization_id", "is", null)),
+    [{ organization_id: faction.id }]);
   await page.getByRole("button", { name: "Publicar resumen", exact: true }).click();
   await page.getByText("Al alba", { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector(".chronicle .chronicle-panel time")?.parentElement.textContent.includes("Publicada"));
@@ -295,6 +335,69 @@ try {
   assert.equal(await playerPage.getByRole("button", { name: "Nueva sesión", exact: true }).count(), 0);
   await playerPage.locator(".chronicle").getByRole("button", { name: "Galería", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
+  const legacyDiary = await insert(director, "diary_entries", { title: "Registro anterior", content: "Debe conservarse" });
+  assert.equal(ok(await member.from("diary_entries").select("content").eq("id", legacyDiary.id).single()).content, "Debe conservarse");
+  const draft = { title: "Bitácora privada", content: "Solo la tripulación", visibility: "private", session_id: session.id, author_character_id: character.id };
+  assert.ok((await onlooker.from("diary_entries").insert(draft)).error);
+  const submitted = await insert(member, "diary_entries", draft);
+  assert.equal(submitted.author_character_name, "Niebla");
+  assert.equal(submitted.author_account_name, player.username);
+  assert.deepEqual(ok(await onlooker.from("diary_entries").select("id").eq("id", submitted.id)), []);
+  assert.equal(ok(await director.from("diary_entries").select("title").eq("id", submitted.id).single()).title, draft.title);
+  assert.ok((await onlooker.from("campaign_comments").insert({
+    diary_id: submitted.id, body: "No debería verlo", author_character_id: otherCharacter.id,
+  })).error);
+  assert.deepEqual(ok(await onlooker.from("diary_entries").update({ content: "Alteración" }).eq("id", submitted.id).select("id")), []);
+
+  await playerPage.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
+  await playerPage.getByRole("button", { name: "Entradas del diario", exact: true }).click();
+  const entryCard = playerPage.locator(".chronicle-panel").filter({ has: playerPage.getByRole("heading", { name: draft.title }) });
+  await entryCard.getByLabel("Añadir imagen", { exact: true }).setInputFiles({
+    name: "bitacora.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await entryCard.getByRole("img", { name: draft.title }).waitFor();
+  const diaryPath = ok(await member.from("diary_entries").select("image_path").eq("id", submitted.id).single()).image_path;
+  cleanup.push(() => admin.storage.from("campaign-files").remove([diaryPath]));
+  assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).error);
+  ok(await member.from("diary_entries").update({ visibility: "shared" }).eq("id", submitted.id));
+  assert.ok(ok(await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).signedUrl);
+  ok(await onlooker.from("campaign_comments").insert({
+    diary_id: submitted.id, body: "Anotado", author_character_id: otherCharacter.id,
+  }));
+  assert.equal(ok(await member.from("campaign_comments").select("body").eq("diary_id", submitted.id).single()).body, "Anotado");
+  ok(await member.from("diary_entries").update({ visibility: "private" }).eq("id", submitted.id));
+  assert.deepEqual(ok(await onlooker.from("campaign_comments").select("body").eq("diary_id", submitted.id)), []);
+  assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(diaryPath, 60)).error);
+  ok(await member.from("diary_entries").delete().eq("id", submitted.id).select().single());
+  ok(await member.storage.from("campaign-files").remove([diaryPath]));
+
+  const questDraft = {
+    title: "Recuperar el mapa", author_character_id: character.id, visibility: "private", priority: "high",
+    objectives: [{ title: "Encontrar la llave", done: false }], participants: [character.id, otherCharacter.id],
+    organization_ids: [faction.id, secondFaction.id], session_id: session.id,
+  };
+  assert.ok((await onlooker.from("chronicle_quests").insert(questDraft)).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, status: "completed" })).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, npc_ids: [foreignNpc.id] })).error);
+  assert.ok((await member.from("chronicle_quests").insert({ ...questDraft, participants: [character.id, character.id] })).error);
+  const proposal = await insert(member, "chronicle_quests", questDraft);
+  assert.deepEqual(proposal.organization_ids, [faction.id, secondFaction.id]);
+  assert.deepEqual(ok(await onlooker.from("chronicle_quests").select("id").eq("id", proposal.id)), []);
+  assert.ok((await member.from("chronicle_quests").update({ rewards: "Oro" }).eq("id", proposal.id)).error);
+  assert.ok((await member.from("chronicle_quests").update({ status: "failed" }).eq("id", proposal.id)).error);
+  ok(await member.from("chronicle_quests").update({ proposed_status: "completed" }).eq("id", proposal.id));
+  ok(await director.from("chronicle_quests").update({ status: "completed", rewards: "Oro" }).eq("id", proposal.id));
+  await playerPage.reload();
+  await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
+  const questCard = playerPage.locator(".chronicle-panel").filter({ has: playerPage.getByRole("heading", { name: questDraft.title }) });
+  await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).click();
+  await questCard.getByRole("checkbox", { name: "Encontrar la llave", checked: true }).waitFor();
+  await playerPage.reload();
+  await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
+  await questCard.getByText("Recompensas: Oro", { exact: true }).waitFor();
+  assert.ok(await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).isChecked());
+
   await playerPage.setViewportSize({ width: 390, height: 844 });
   const mobileMenu = playerPage.getByRole("button", { name: "Menú de campaña" });
   assert.equal(await playerPage.getByRole("navigation", { name: "Menú de campaña" }).isVisible(), false);
@@ -310,6 +413,43 @@ try {
   await inventory.getByRole("spinbutton", { name: "Cantidad", exact: true }).fill("2");
   await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
+
+  const legacy = new URL(base);
+  legacy.hash = "/resources";
+  await playerPage.goto(legacy.href);
+  await playerPage.getByText("Recursos del Grupo", { exact: true }).click();
+  await playerPage.getByText(resource.name, { exact: true }).waitFor();
+  assert.equal(ok(await member.from("resources").select("quantity").eq("id", resource.id).single()).quantity, 4);
+  assert.equal(ok(await member.from("inventory_group_contributions").select("id").eq("name", resource.name)).length, 0);
+
+  await playerPage.getByLabel("Añadir imagen", { exact: true }).setInputFiles({
+    name: "amuleto.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64"),
+  });
+  await playerPage.getByRole("link", { name: "Ampliar imagen de Amuleto" }).waitFor();
+  const artwork = ok(await member.from("inventory_group_contributions").select("artwork_path").eq("id", groupItem.id).single()).artwork_path;
+  cleanup.push(() => admin.storage.from("inventory-artwork").remove([artwork]));
+  assert.ok((await onlooker.storage.from("inventory-artwork").createSignedUrl(artwork, 60)).error);
+  assert.ok((await onlooker.rpc("set_inventory_artwork", { item: groupItem.id, path: null, previous_path: artwork })).error);
+  ok(await movement(member, { ...itemTransfer, operation: "to_character", item_id: groupItem.id, quantity: 1 }));
+  assert.equal(ok(await member.from("character_inventory").select("artwork_path").eq("artwork_path", artwork).single()).artwork_path, artwork);
+  assert.ok(ok(await member.storage.from("inventory-artwork").createSignedUrl(artwork, 60)).signedUrl);
+
+  const manageGroup = (client, action, party, group_name = null) =>
+    client.rpc("manage_inventory_group", { action, party, group_name });
+  assert.ok((await manageGroup(member, "rename", group, "Sin permiso")).error);
+  assert.ok((await manageGroup(director, "archive", foreignGroup)).error);
+  assert.ok((await manageGroup(director, "rename", group, "   ")).error);
+  ok(await manageGroup(director, "rename", group, "Exploradores del faro"));
+  assert.equal(ok(await member.from("inventory_groups").select("name").eq("id", group).single()).name, "Exploradores del faro");
+  const impact = ok(await manageGroup(director, "impact", group));
+  assert.equal(impact.members, 1);
+  assert.equal(impact.coins.gp, 4);
+  assert.ok(impact.history > 0);
+  ok(await manageGroup(director, "archive", group));
+  assert.ok((await movement(member, deposit)).error);
+  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
 
   console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");
 } finally {

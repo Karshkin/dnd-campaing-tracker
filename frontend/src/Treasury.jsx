@@ -95,7 +95,15 @@ export function MovementEditor({ groupId, characters, items, busy, onAdd, closur
   </form>;
 }
 
-export function Treasury({ groupId, characters, revision, onMove }) {
+export function ItemArtwork({ path, name }) {
+  const load = useCallback(() => treasury.artwork(path), [path]);
+  const { data } = useCampaignQuery(load);
+  return data ? <a href={data} target="_blank" rel="noreferrer" aria-label={`Ampliar imagen de ${name}`}>
+    <img className="treasure-thumbnail" src={data} alt={name} loading="lazy" />
+  </a> : <span className="treasure-thumbnail treasure-placeholder" aria-hidden="true">◇</span>;
+}
+
+export function Treasury({ groupId, characters, revision, onMove, director, userId, archived }) {
   const load = useCallback(async () => {
     const [contents, sessions] = await Promise.all([
       treasury.contents(groupId), campaignChronicle.list("chronicle_sessions", "played_on"),
@@ -109,6 +117,7 @@ export function Treasury({ groupId, characters, revision, onMove }) {
   const [historySession, setHistorySession] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [grid, setGrid] = useState(true);
   const [distribution, setDistribution] = useState([]);
   const request = useRef(null);
   if (error) return <p role="alert">{error}</p>;
@@ -128,7 +137,7 @@ export function Treasury({ groupId, characters, revision, onMove }) {
   return <div className="chronicle-panel">
     <h4>Monedero</h4>
     <Wallet rows={wallet} />
-    <details>
+    {!archived && <details>
       <summary>Ingresos, transferencias y reparto</summary>
       <SelectRow label="Sesión del movimiento" rows={sessions} value={session} onChange={setSession} empty="Sin sesión" />
       <MovementEditor groupId={groupId} items={items} characters={characters} busy={mutation.busy}
@@ -146,15 +155,33 @@ export function Treasury({ groupId, characters, revision, onMove }) {
           if (await commit(distribution)) setDistribution([]);
         }}>Confirmar reparto</button>
       </div>}
-    </details>
+    </details>}
     {mutation.error && <p className="error" role="alert">{mutation.error}</p>}
     <div className="chronicle-actions">
       <label>Buscar objetos <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
       <SelectRow label="Categoría" rows={asRows(categories)} value={category} onChange={setCategory} empty="Todas" />
+      <button type="button" aria-pressed={grid} onClick={() => setGrid(!grid)}>{grid ? "Ver listado" : "Ver cuadrícula"}</button>
     </div>
-    <ul className="chronicle-list">{items.filter((row) => (!category || row.category === category)
+    <ul className={grid ? "treasure-grid" : "treasure-list"}>{items.filter((row) => (!category || row.category === category)
       && row.name.toLowerCase().includes(search.toLowerCase())).map((row) => (
-      <li key={row.id}><strong>{row.name}</strong> × {row.quantity} · {categories[row.category]}<ItemDetails details={row.details} /></li>
+      <li key={row.id}>
+        <ItemArtwork key={row.artwork_path} path={row.artwork_path} name={row.name} />
+        <div><strong>{row.name}</strong> × {row.quantity} · {categories[row.category]}
+          <ItemDetails details={row.details} />
+          {!archived && (director || row.contributed_by === userId) && <div className="chronicle-actions">
+            <label>{row.artwork_path ? "Sustituir imagen" : "Añadir imagen"}
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                disabled={mutation.busy} onChange={(event) => {
+                  const file = event.target.files[0];
+                  event.target.value = "";
+                  if (file) mutation.run(() => treasury.setArtwork(row, file));
+                }} />
+            </label>
+            {row.artwork_path && <button type="button" disabled={mutation.busy}
+              onClick={() => mutation.run(() => treasury.setArtwork(row, null))}>Quitar imagen</button>}
+          </div>}
+        </div>
+      </li>
     ))}</ul>
     <details>
       <summary>Historial de movimientos</summary>

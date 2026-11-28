@@ -65,6 +65,14 @@
     "expand": "Expandeix la navegació",
     "collapse": "Redueix la navegació"
   },
+  "choices": {
+    "search": "Cerca",
+    "selected": "{{count}} seleccionats",
+    "unavailable": "Element #{{id}}",
+    "remove": "Treu {{name}}",
+    "all": "Selecciona tota l’assistència",
+    "empty": "Cap coincidència"
+  },
   "common": {
     "loading": "S’està carregant…",
     "title": "Títol",
