@@ -1,5 +1,7 @@
 import { HarptosCalendar } from "./HarptosCalendar";
 import { Encounters } from "./Encounters";
+import { Merchants } from "./Merchants";
+import { MapRoutes, useMapRoutes } from "./MapRoutes";
 import { Dashboard } from "./Dashboard";
 import { Investigation } from "./Investigation";
 import { Correspondence } from "./Correspondence";
@@ -83,7 +85,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["home", "calendar", "encounters", "correspondence", "investigation", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "calendar", "encounters", "correspondence", "investigation", "tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -203,6 +205,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   const [placingMarker, setPlacingMarker] = useState(false);
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
+  const mapRoutes = useMapRoutes(trackerMap?.id);
+  const [activeMapRoute, setActiveMapRoute] = useState(null);
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
   const mapPlaces = trackerMapPOIs.filter((row) => row.map_id === trackerMap?.id);
   const listedPlaces = mapPlaces.filter((row) => !hiddenMarkerTypes.includes(markerCategory(row)));
@@ -373,6 +377,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       investigation: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
+      merchants: ["tracker", "view"],
       characters: ["characters", "view"],
       bestiary: ["bestiary", "view"],
       organizations: ["organizations", "view"],
@@ -1161,6 +1166,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             {placingMarker && <p className="atlas-hint" role="status">{t("tracker.clickToPlace")}</p>}
             <div className="atlas-layout">
               <AtlasMap mapId={trackerMap.id} linkedPlace={linkedPlace}
+                routes={(mapRoutes.data ?? []).filter((row) => row.id === activeMapRoute)}
+                places={trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)}
                 markerDetails={(marker) => <VisibilityEditor key={`${marker.event_type ?? "poi"}:${marker.id}`}
                   kind={marker.event_type ? "map_events" : "points_of_interest"} id={marker.id}
                   characters={campaign?.is_director ? characters : null} />}
@@ -1226,6 +1233,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   </form>
                 )}
 
+                {trackerMap && <MapRoutes key={trackerMap.id} mapId={trackerMap.id} routes={mapRoutes}
+                  places={trackerMapPOIs} director={campaign?.is_director} characters={characters}
+                  selected={activeMapRoute} select={setActiveMapRoute} />}
                 {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>
@@ -1297,6 +1307,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 )}
           </>}
         </section>
+      )}
+
+      {activeView === "merchants" && campaign && hasPagePermission("tracker") && (
+        <Merchants director={campaign.is_director} traders={hasPagePermission("characters", "edit") ? commentAuthors : []}
+          characters={characters} npcs={allies} factions={organizations} />
       )}
 
       {activeView === "inventory" && isAuthenticated && hasPagePermission("tracker") && (
