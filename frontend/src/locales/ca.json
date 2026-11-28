@@ -39,14 +39,14 @@
     "chronicle": "Crònica d’aventures",
     "inventory": "Inventari de grup",
     "resources": "Recursos",
-    "characters": "🗡️ Personatges",
-    "bestiary": "🐉 Bestiari",
-    "organizations": "🏰 Organitzacions",
-    "npcs": "👤 PNJ",
-    "admin": "⚙️ Administració",
-    "login": "🔓 Entra",
-    "register": "📝 Registra’t",
-    "logout": "🚪 Surt"
+    "characters": "Personatges",
+    "bestiary": "Bestiari",
+    "organizations": "Organitzacions",
+    "npcs": "PNJ",
+    "admin": "Administració",
+    "login": "Entra",
+    "register": "Registra’t",
+    "logout": "Surt"
   },
   "chronicleNav": {
     "sessions": "Sessions",
@@ -54,6 +54,15 @@
     "gallery": "Galeria",
     "archive": "Entrades del diari",
     "searchArchive": "Cerca al diari"
+  },
+  "sidebar": {
+    "campaign": "Campanya",
+    "world": "El món",
+    "tools": "Eines",
+    "administration": "Administració",
+    "menu": "Menú de campanya",
+    "expand": "Expandeix la navegació",
+    "collapse": "Redueix la navegació"
   },
   "choices": {
     "search": "Cerca",

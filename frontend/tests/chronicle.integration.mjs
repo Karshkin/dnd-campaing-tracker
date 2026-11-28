@@ -208,6 +208,10 @@ try {
   }
 
   await openAs(dm);
+  const sidebar = page.getByRole("navigation", { name: "Menú de campaña" });
+  await page.getByRole("button", { name: "Contraer navegación" }).click();
+  assert.ok(await sidebar.getByRole("button", { name: "Inventario grupal" }).isVisible());
+  await page.getByRole("button", { name: "Expandir navegación" }).click();
   const chronicle = page.locator(".chronicle");
   await chronicle.getByText("Galería", { exact: true }).click();
   await chronicle.getByLabel("Imagen", { exact: true }).setInputFiles({
@@ -303,7 +307,6 @@ try {
   assert.equal(await playerPage.getByRole("button", { name: "Nueva sesión", exact: true }).count(), 0);
   await playerPage.locator(".chronicle").getByRole("button", { name: "Galería", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
-  await playerPage.setViewportSize({ width: 390, height: 844 });
   const legacyDiary = await insert(director, "diary_entries", { title: "Registro anterior", content: "Debe conservarse" });
   assert.equal(ok(await member.from("diary_entries").select("content").eq("id", legacyDiary.id).single()).content, "Debe conservarse");
   const draft = { title: "Bitácora privada", content: "Solo la tripulación", visibility: "private", session_id: session.id, author_character_id: character.id };
@@ -367,8 +370,13 @@ try {
   await questCard.getByText("Recompensas: Oro", { exact: true }).waitFor();
   assert.ok(await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).isChecked());
 
+  await playerPage.setViewportSize({ width: 390, height: 844 });
+  const mobileMenu = playerPage.getByRole("button", { name: "Menú de campaña" });
+  assert.equal(await playerPage.getByRole("navigation", { name: "Menú de campaña" }).isVisible(), false);
+  await mobileMenu.click();
   await playerPage.getByRole("button", { name: "Inventario grupal", exact: true }).click();
   await playerPage.getByRole("heading", { name: "Monedero", exact: true }).waitFor();
+  assert.equal(await mobileMenu.getAttribute("aria-expanded"), "false");
   assert.equal(await playerPage.getByRole("heading", { name: "Crónica de aventuras" }).count(), 0);
   const inventory = playerPage.locator(".group-inventory");
   assert.match(await inventory.locator(".treasury-wallet").textContent(), /Oro4/);
