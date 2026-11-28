@@ -26,7 +26,7 @@ async function optional(query) {
 export function Dashboard({ director, characters, navigate, views }) {
   const load = useCallback(async () => {
     const today = new Date().toLocaleDateString("sv-SE");
-    const [sessions, quests, diary, wallets, factions, groups, activity, encounters, clock, letters] = await Promise.all([
+    const [sessions, quests, diary, wallets, factions, groups, activity, encounters, clock, letters, secrets] = await Promise.all([
       read(supabase.from("chronicle_sessions").select("id,title,played_on,status").gte("played_on", today)
         .neq("status", "closed").order("played_on").limit(1)),
       read(supabase.from("chronicle_quests").select("id,title,status").eq("status", "active").order("title").limit(5)),
@@ -38,14 +38,15 @@ export function Dashboard({ director, characters, navigate, views }) {
       optional(supabase.rpc("visible_encounters")),
       optional(supabase.from("harptos_clock").select("world_day").maybeSingle()),
       optional(supabase.from("campaign_documents").select("id,title").order("created_at",{ ascending: false }).limit(3)),
+      director ? optional(supabase.from("entity_secrets").select("id,label,kind").eq("audience","director").order("label").limit(8)) : null,
     ]);
     const organizationIds = [...new Set(factions.map(({ organization_id }) => organization_id))];
     const organizations = organizationIds.length
       ? await read(supabase.from("organizations").select("id,name").in("id", organizationIds)) : [];
     const calendar = clock ? await optional(supabase.from("harptos_events").select("id,title,world_day,kind")
       .gte("world_day",clock.world_day).order("world_day").limit(3)) : null;
-    return { sessions, quests, diary, wallets, factions, groups, activity, organizations, encounters, calendar, letters };
-  }, []);
+    return { sessions, quests, diary, wallets, factions, groups, activity, organizations, encounters, calendar, letters, secrets };
+  }, [director]);
   const { data, error, refresh } = useCampaignQuery(load);
   if (error) return <section className="card"><p role="alert">{error}</p><button onClick={refresh}>Reintentar</button></section>;
   if (!data) return <section className="card"><p role="status">Cargando inicio…</p></section>;
@@ -99,6 +100,10 @@ export function Dashboard({ director, characters, navigate, views }) {
       {data.letters && <section className="card"><h3>Correspondencia reciente</h3>
         {data.letters.length ? <ul>{data.letters.map(({ id,title }) => <li key={id}>{title}</li>)}</ul> : <p>No hay documentos visibles.</p>}
         {views.includes("correspondence") && <button type="button" onClick={() => navigate("correspondence")}>Abrir correspondencia</button>}
+      </section>}
+      {data.secrets && <section className="card"><h3>Información pendiente de revelar</h3>
+        {data.secrets.length ? <ul>{data.secrets.map(({ id,label }) => <li key={id}>{label}</li>)}</ul>
+          : <p>Las fichas carecen de notas reservadas.</p>}
       </section>}
       <section className="card wide"><h3>Actividad reciente</h3>
         {data.activity.length ? <ul>{data.activity.map(({ id, entity_kind, action, occurred_at }) => (
