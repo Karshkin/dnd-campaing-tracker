@@ -55,6 +55,14 @@
     "archive": "Diary entries",
     "searchArchive": "Search diary entries"
   },
+  "choices": {
+    "search": "Search",
+    "selected": "{{count}} selected",
+    "unavailable": "Entry #{{id}}",
+    "remove": "Remove {{name}}",
+    "all": "Select all attendees",
+    "empty": "No matches"
+  },
   "common": {
     "loading": "Loading…",
     "title": "Title",

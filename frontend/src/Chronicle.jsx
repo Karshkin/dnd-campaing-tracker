@@ -65,8 +65,8 @@ function SessionEditor({ session, data, entities, characters, onSave, busy, onCa
     <label>Recompensas <textarea name="rewards" defaultValue={session.rewards} /></label>
     <label>Decisiones <textarea name="decisions" defaultValue={session.decisions} /></label>
     <label>Consecuencias <textarea name="consequences" defaultValue={session.consequences} /></label>
-    <div className="chronicle-actions">
-      <Choices label="Asistencia" rows={characters} values={attendance} onChange={setAttendance} />
+    <div className="chronicle-choice-grid">
+      <Choices selectAll label="Asistencia" rows={characters} values={attendance} onChange={setAttendance} />
       {Object.entries(linkTypes).map(([key, label]) => <Choices key={key} label={label} rows={entities[key]}
         values={links[key]} onChange={(ids) => setLinks({ ...links, [key]: ids })} />)}
     </div>
