@@ -39,14 +39,14 @@
     "chronicle": "Crónica de aventuras",
     "inventory": "Inventario grupal",
     "resources": "Recursos",
-    "characters": "🗡️ Personajes",
-    "bestiary": "🐉 Bestiario",
-    "organizations": "🏰 Organizaciones",
-    "npcs": "👤 PNJs",
-    "admin": "⚙️ Admin",
-    "login": "🔓 Entrar",
-    "register": "📝 Registro",
-    "logout": "🚪 Salir"
+    "characters": "Personajes",
+    "bestiary": "Bestiario",
+    "organizations": "Organizaciones",
+    "npcs": "PNJs",
+    "admin": "Admin",
+    "login": "Entrar",
+    "register": "Registro",
+    "logout": "Salir"
   },
   "chronicleNav": {
     "sessions": "Sesiones",
@@ -54,6 +54,15 @@
     "gallery": "Galería",
     "archive": "Entradas del diario",
     "searchArchive": "Buscar en el diario"
+  },
+  "sidebar": {
+    "campaign": "Campaña",
+    "world": "El mundo",
+    "tools": "Herramientas",
+    "administration": "Administración",
+    "menu": "Menú de campaña",
+    "expand": "Expandir navegación",
+    "collapse": "Contraer navegación"
   },
   "common": {
     "loading": "Cargando…",

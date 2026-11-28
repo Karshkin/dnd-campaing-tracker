@@ -1,3 +1,5 @@
+import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
+import { CampaignNavigation } from "./CampaignNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 
@@ -249,7 +251,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.5rem" }}>
-        <small style={{ color: "#5d3a1a" }}>{t('tracker.legend')}</small>
+        <small style={{ color: "var(--ink-mid)" }}>{t('tracker.legend')}</small>
         <button type="button" onClick={resetView} style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}>{t('tracker.resetView')}</button>
       </div>
     </div>
@@ -1164,7 +1166,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   };
 
   return (
-    <main className="campaign-theme" data-theme={campaign?.theme} style={{ "--campaign-accent": campaign?.accent }}>
+    <main className={`campaign-theme editorial-shell ${isAuthenticated ? "with-sidebar" : ""}`} data-theme={campaign?.theme}
+      style={{ "--campaign-accent": campaign?.accent }}>
+      {isAuthenticated && <CampaignNavigation activeView={activeView} navigate={navigate}
+        permitted={hasPagePermission} logout={logout} tools={<LanguagePicker />} />}
+      <div className="editorial-content">
       <header className={campaign ? "campaign-header" : undefined}>
         {campaign && images[campaign.cover_path] && <img className="campaign-cover" src={images[campaign.cover_path]} alt="" />}
         <div className="campaign-brand">
@@ -1175,59 +1181,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </div>
         </div>
         {campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} isSuperadmin={isSuperadmin} />}
-        <div className="tabs">
+        {!isAuthenticated && <div className="tabs">
           <LanguagePicker />
-          {isAuthenticated && hasPagePermission("tracker") &&
-            ["tracker", "chronicle", "inventory", "resources"].map((view) => (
-              <button key={view} type="button" onClick={() => navigate(view)}
-                className={activeView === view ? "active" : ""}
-                aria-current={activeView === view ? "page" : undefined}>
-                {t(`nav.${view === "tracker" ? "locations" : view}`)}
-              </button>
-            ))}
-          {isAuthenticated && (
-            <>
-              {hasPagePermission("characters", "view") && (
-                <button type="button" onClick={() => navigate("characters")} className={activeView === "characters" ? "active" : ""}>
-                  {t('nav.characters')}
-                </button>
-              )}
-              {hasPagePermission("bestiary", "view") && (
-                <button type="button" onClick={() => navigate("bestiary")} className={activeView === "bestiary" && hasPagePermission("bestiary") ? "active" : ""}>
-                  {t('nav.bestiary')}
-                </button>
-              )}
-              {hasPagePermission("organizations", "view") && (
-                <button type="button" onClick={() => navigate("organizations")} className={activeView === "organizations" ? "active" : ""}>{t('nav.organizations')}</button>
-              )}
-              {hasPagePermission("npcs", "view") && (
-                <button type="button" onClick={() => navigate("npcs")} className={activeView === "npcs" ? "active" : ""}>
-                  {t('nav.npcs')}
-                </button>
-              )}
-              {hasPagePermission("admin", "admin") && (
-                <button type="button" onClick={() => navigate("admin")} className={activeView === "admin" ? "active" : ""}>
-                  {t('nav.admin')}
-                </button>
-              )}
-            </>
-          )}
-          {!isAuthenticated && (
-            <>
-              <button type="button" onClick={() => navigate("login")} className={activeView === "login" ? "active" : ""}>
-                {t('nav.login')}
-              </button>
-              <button type="button" onClick={() => navigate("register")} className={activeView === "register" ? "active" : ""}>
-                {t('nav.register')}
-              </button>
-            </>
-          )}
-          {isAuthenticated && (
-            <button type="button" onClick={logout}>
-              {t('nav.logout')}
-            </button>
-          )}
-        </div>
+          {["login", "register"].map((view) => <button key={view} type="button"
+            className={activeView === view ? "active" : ""} onClick={() => navigate(view)}>{t(`nav.${view}`)}</button>)}
+        </div>}
       </header>
       {operationError && <p className="error" role="alert">{operationError}</p>}
       {(pending > 0 || (isAuthenticated && !currentUser && !operationError)) &&
@@ -1261,7 +1219,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             <p>
               <small>
                 {t('auth.noAccount')}{" "}
-                <button type="button" onClick={() => navigate("register")} style={{ background: "none", border: "none", color: "#8b4513", textDecoration: "underline", cursor: "pointer" }}>
+                <button type="button" onClick={() => navigate("register")} style={{ background: "none", border: "none", color: "var(--ink-mid)", textDecoration: "underline", cursor: "pointer" }}>
                   {t('auth.registerHere')}
                 </button>
               </small>
@@ -1311,7 +1269,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             <p>
               <small>
                 {t('auth.hasAccount')}{" "}
-                <button type="button" onClick={() => navigate("login")} style={{ background: "none", border: "none", color: "#8b4513", textDecoration: "underline", cursor: "pointer" }}>
+                <button type="button" onClick={() => navigate("login")} style={{ background: "none", border: "none", color: "var(--ink-mid)", textDecoration: "underline", cursor: "pointer" }}>
                   {t('auth.loginHere')}
                 </button>
               </small>
@@ -1377,9 +1335,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     boxShadow: "0 10px 24px rgba(77, 46, 18, 0.16)",
                   }}
                 >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🗺️</div>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}><Map aria-hidden="true" /></div>
                   <h2 style={{ margin: "0 0 0.75rem", color: "#5d2f12" }}>{t('tracker.noMapTitle')}</h2>
-                  <p style={{ margin: "0 0 0.5rem", color: "#5d3a1a", lineHeight: 1.5 }}>{t('tracker.noMapMessage')}</p>
+                  <p style={{ margin: "0 0 0.5rem", color: "var(--ink-mid)", lineHeight: 1.5 }}>{t('tracker.noMapMessage')}</p>
                   <p style={{ margin: 0, color: "#7a5a33", lineHeight: 1.5 }}>
                     {canManageAdmin ? t('tracker.noMapAdminHint') : t('tracker.noMapUserHint')}
                   </p>
@@ -1408,7 +1366,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     </select>
                   )}
                 </div>
-                {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#5d3a1a" }}>{t('tracker.clickToPlace')}</p>}
+                {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "var(--ink-mid)" }}>{t('tracker.clickToPlace')}</p>}
                 <MapView
                   mapId={trackerMap?.id}
                   linkedPlace={linkedPlace}
@@ -1463,7 +1421,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>
-                    <summary style={{ cursor: "pointer", color: "#5d3a1a", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
+                    <summary style={{ cursor: "pointer", color: "var(--ink-mid)", fontWeight: "bold" }}>{t('tracker.manageMarkers')}</summary>
                     <ul style={{ marginTop: "0.5rem" }}>
                       {trackerMapPOIs.map((poi) => (
                         <li key={`poi-${poi.id}`}>
@@ -1479,10 +1437,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                                 <option value="quest">{t('tracker.quest')}</option>
                               </select>
                               <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                                🖼️ {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
+                                <ImageIcon size={16} aria-hidden="true" /> {editingPoi.image_path ? t('common.replaceImage') : t('common.addImage')}
                                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingPoiImageFile(e.target.files[0] || null)} />
                               </label>
-                              {editingPoiImageFile && <small style={{ color: "#5d3a1a" }}>{editingPoiImageFile.name}</small>}
+                              {editingPoiImageFile && <small style={{ color: "var(--ink-mid)" }}>{editingPoiImageFile.name}</small>}
                               <button type="submit">{t('common.save')}</button>
                               <button type="button" onClick={() => { setEditingPoi(null); setEditingPoiImageFile(null); }}>{t('common.cancel')}</button>
                             </form>
@@ -1508,10 +1466,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                                 <option value="quest">{t('tracker.quest')}</option>
                               </select>
                               <label style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                                🖼️ {editingEvent.image_path ? t('common.replaceImage') : t('common.addImage')}
+                                <ImageIcon size={16} aria-hidden="true" /> {editingEvent.image_path ? t('common.replaceImage') : t('common.addImage')}
                                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setEditingEventImageFile(e.target.files[0] || null)} />
                               </label>
-                              {editingEventImageFile && <small style={{ color: "#5d3a1a" }}>{editingEventImageFile.name}</small>}
+                              {editingEventImageFile && <small style={{ color: "var(--ink-mid)" }}>{editingEventImageFile.name}</small>}
                               <button type="submit">{t('common.save')}</button>
                               <button type="button" onClick={() => { setEditingEvent(null); setEditingEventImageFile(null); }}>{t('common.cancel')}</button>
                             </form>
@@ -1576,7 +1534,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   {t('common.imageOptionalLabel')}
                   <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setResourceImageFile(e.target.files[0] || null)} />
                 </label>
-                {resourceImageFile && <small style={{ color: "#5d3a1a" }}>{resourceImageFile.name}</small>}
+                {resourceImageFile && <small style={{ color: "var(--ink-mid)" }}>{resourceImageFile.name}</small>}
                 <button type="submit">{t('resources.add')}</button>
                 {resourceError ? <p className="error">{resourceError}</p> : null}
               </form>
@@ -1593,15 +1551,15 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       title={t('common.clickToView')}
                     />
                   ) : hasPagePermission("tracker", "edit") ? (
-                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513", whiteSpace: "nowrap" }} title={t('common.addImage')}>
-                      🖼️
+                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "var(--ink-mid)", whiteSpace: "nowrap" }} title={t('common.addImage')}>
+                      <ImageIcon size={16} aria-hidden="true" />
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   ) : null}
                   <span style={{ flexGrow: 1 }}><strong>{item.name}</strong>: {item.quantity}{item.notes ? ` (${item.notes})` : ""}</span>
                   {hasPagePermission("tracker", "edit") && item.image_path && (
-                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#8b4513" }} title={t('common.replaceImage')}>
-                      🔄
+                    <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "var(--ink-mid)" }} title={t('common.replaceImage')}>
+                      <RefreshCw size={16} aria-hidden="true" />
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadResourceImage(item.id, e.target.files[0]); }} />
                     </label>
                   )}
@@ -1667,7 +1625,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       {t('common.imageOptionalLabel')}
                       <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setDiaryImageFile(e.target.files[0] || null)} />
                     </label>
-                    {diaryImageFile && <small style={{ color: "#5d3a1a" }}>{diaryImageFile.name}</small>}
+                    {diaryImageFile && <small style={{ color: "var(--ink-mid)" }}>{diaryImageFile.name}</small>}
                     <button type="submit">{t('diary.add')}</button>
                     {diaryError ? <p className="error">{diaryError}</p> : null}
                   </form>
@@ -1682,7 +1640,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                         <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
                           {hasPagePermission("tracker", "edit") && (
                             <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={entry.image_path ? t('common.replaceImage') : t('common.addImage')}>
-                              🖼️
+                              <ImageIcon size={16} aria-hidden="true" />
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadDiaryImage(entry.id, e.target.files[0]); }} />
                             </label>
                           )}
@@ -1756,7 +1714,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     ))}
                   </select>
                   <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                    🖼️ {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
+                    <ImageIcon size={16} aria-hidden="true" /> {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
                   </label>
                   <details className="character-sheet-panel">
@@ -1791,7 +1749,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                           <small> · {t('characters.owner', { name: char.owner.username })}</small>
                         )}
                         {char.organization_id && organizations.find((o) => o.id === char.organization_id) && (
-                          <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>
+                          <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", background: "var(--ink-mid)", color: "#fff", borderRadius: "4px", padding: "1px 6px" }}>
                             {organizations.find((o) => o.id === char.organization_id).name}
                           </span>
                         )}
@@ -1858,7 +1816,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                           title={t('common.clickToView')}
                         />
                         {canEditSelectedCharacter && (
-                          <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "#5d3a1a" }} title={t('common.replaceImage')}>
+                          <label style={{ fontSize: "0.8rem", cursor: "pointer", color: "var(--ink-mid)" }} title={t('common.replaceImage')}>
                             {t('common.replace')}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
                           </label>
@@ -1866,7 +1824,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       </div>
                     ) : (
                       canEditSelectedCharacter ? (
-                        <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "#5d3a1a" }} title={t('characters.addPortraitShort')}>
+                        <label style={{ width: "96px", height: "96px", border: "2px dashed #8b4513", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", color: "var(--ink-mid)" }} title={t('characters.addPortraitShort')}>
                           <span className="character-profile-emoji">{selectedCharacter.emoji || defaultCharacterEmoji}</span>
                           <span>{t('characters.addPortraitShort')}</span>
                           <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCharacterImage(selectedCharacter.id, e.target.files[0]); }} />
@@ -1889,8 +1847,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       <p className="character-profile-owner">{t('characters.owner', { name: selectedCharacter.owner.username })}</p>
                     )}
                     {selectedCharacter.organization_id && organizations.find((o) => o.id === selectedCharacter.organization_id) && (
-                      <span style={{ fontSize: "0.85rem", background: "#8b4513", color: "#fff", borderRadius: "4px", padding: "2px 8px", display: "inline-block", marginBottom: "0.5rem" }}>
-                        🏰 {organizations.find((o) => o.id === selectedCharacter.organization_id).name}
+                      <span style={{ fontSize: "0.85rem", background: "var(--ink-mid)", color: "#fff", borderRadius: "4px", padding: "2px 8px", display: "inline-block", marginBottom: "0.5rem" }}>
+                        <Castle aria-hidden="true" /> {organizations.find((o) => o.id === selectedCharacter.organization_id).name}
                       </span>
                     )}
                   </div>
@@ -2082,7 +2040,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     {t('common.imageOptionalLabel')}
                     <input type="file" accept="image/*" style={{ marginLeft: "0.5rem" }} onChange={(e) => setCreatureImageFile(e.target.files[0] || null)} />
                   </label>
-                  {creatureImageFile && <small style={{ color: "#5d3a1a" }}>{creatureImageFile.name}</small>}
+                  {creatureImageFile && <small style={{ color: "var(--ink-mid)" }}>{creatureImageFile.name}</small>}
                   <EntryPrivacy collection="creatures" draft={creatureDraft} setDraft={setCreatureDraft} />
                   <button type="submit">{t('admin.addCreature')}</button>
                 </form>
@@ -2103,11 +2061,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     />
                   ) : hasPagePermission("bestiary", "edit") ? (
                     <label style={{ width: "64px", height: "64px", border: "2px dashed #8b4513", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.8rem" }} title={t('common.addImage')}>
-                      🐉
+                      <Skull aria-hidden="true" />
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
                     </label>
                   ) : (
-                    <span style={{ fontSize: "2rem", flexShrink: 0 }}>🐉</span>
+                    <span style={{ fontSize: "2rem", flexShrink: 0 }}><Skull aria-hidden="true" /></span>
                   )}
                   <div className="campaign-entry-content">
                     <div className="row">
@@ -2115,7 +2073,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       <div style={{ display: "flex", gap: "0.25rem" }}>
                         {hasPagePermission("bestiary", "edit") && creature.image_path && (
                           <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
-                            🔄
+                            <RefreshCw size={16} aria-hidden="true" />
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadCreatureImage(creature.id, e.target.files[0]); }} />
                           </label>
                         )}
@@ -2179,7 +2137,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     placeholder={t('common.descriptionOptional')}
                   />
                   <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                    🖼️ {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
+                    <ImageIcon size={16} aria-hidden="true" /> {orgImageFile ? orgImageFile.name : t('common.addImageOptional')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setOrgImageFile(e.target.files[0] || null)} />
                   </label>
                   <EntryPrivacy collection="organizations" draft={orgDraft} setDraft={setOrgDraft} />
@@ -2208,8 +2166,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       overflow: "hidden",
                       cursor: "pointer",
                       background: isSelected
-                        ? "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)"
-                        : "linear-gradient(160deg, #fdf8ef 0%, #f5e9d0 100%)",
+                        ? "var(--surface)"
+                        : "var(--surface)",
                       boxShadow: isSelected
                         ? "0 4px 16px rgba(107,45,15,0.35), 0 0 0 1px var(--gold)"
                         : "0 2px 8px rgba(0,0,0,0.25)",
@@ -2220,7 +2178,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       {org.image_path ? (
                         <img src={org.image_path} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
-                        <span style={{ fontSize: "3rem" }}>🏰</span>
+                        <span style={{ fontSize: "3rem" }}><Castle aria-hidden="true" /></span>
                       )}
                     </div>
                     <div style={{ padding: "0.6rem 0.75rem" }}>
@@ -2247,7 +2205,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             </div>
 
             {selectedOrg && (
-              <div key={selectedOrg.id} id={`organization_id-${selectedOrg.id}`} tabIndex={-1} style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "linear-gradient(160deg, #f9f0db 0%, #ecddb8 100%)" }}>
+              <div key={selectedOrg.id} id={`organization_id-${selectedOrg.id}`} tabIndex={-1} style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "var(--surface)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "rgba(107,45,15,0.08)", borderBottom: "1px solid var(--gold-dark)" }}>
                   {selectedOrg.image_path && (
                     <img
@@ -2349,7 +2307,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     ))}
                   </select>
                   <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                    🖼️ {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
+                    <ImageIcon size={16} aria-hidden="true" /> {allyImageFile ? allyImageFile.name : t('admin.portraitOptional')}
                     <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setAllyImageFile(e.target.files[0] || null)} />
                   </label>
                   <EntryPrivacy collection="allies" draft={allyDraft} setDraft={setAllyDraft} />
@@ -2388,7 +2346,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                           {org && (
                             <span
                               onClick={() => { navigate("organizations"); setSelectedOrg(org); }}
-                              style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#8b4513", cursor: "pointer", textDecoration: "underline" }}
+                              style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "var(--ink-mid)", cursor: "pointer", textDecoration: "underline" }}
                               title={t('npcs.goToOrg')}
                             >({org.name})</span>
                           )}
@@ -2399,7 +2357,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                         <div style={{ display: "flex", gap: "0.25rem" }}>
                           {hasPagePermission("npcs", "edit") && ally.image_path && (
                             <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
-                              🔄
+                              <RefreshCw size={16} aria-hidden="true" />
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
                             </label>
                           )}
@@ -2487,7 +2445,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                         <tr key={user.id}>
                           <td>
                             <strong>{user.username}</strong>
-                            {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "#8b4513" }}>{t('admin.currentUser')}</span> : null}
+                            {user.id === currentUser?.id ? <span style={{ marginLeft: "0.5rem", color: "var(--ink-mid)" }}>{t('admin.currentUser')}</span> : null}
                           </td>
                           {PAGE_KEYS.map((pageKey) => {
                             const permissionLocked = user.is_admin || (user.id === currentUser?.id && pageKey === "admin");
@@ -2546,6 +2504,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </article>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

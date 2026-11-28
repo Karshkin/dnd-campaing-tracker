@@ -39,14 +39,14 @@
     "chronicle": "Adventure chronicle",
     "inventory": "Group inventory",
     "resources": "Resources",
-    "characters": "🗡️ Characters",
-    "bestiary": "🐉 Bestiary",
-    "organizations": "🏰 Organizations",
-    "npcs": "👤 NPCs",
-    "admin": "⚙️ Admin",
-    "login": "🔓 Login",
-    "register": "📝 Register",
-    "logout": "🚪 Logout"
+    "characters": "Characters",
+    "bestiary": "Bestiary",
+    "organizations": "Organizations",
+    "npcs": "NPCs",
+    "admin": "Admin",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout"
   },
   "chronicleNav": {
     "sessions": "Sessions",
@@ -54,6 +54,15 @@
     "gallery": "Gallery",
     "archive": "Diary entries",
     "searchArchive": "Search diary entries"
+  },
+  "sidebar": {
+    "campaign": "Campaign",
+    "world": "The world",
+    "tools": "Tools",
+    "administration": "Administration",
+    "menu": "Campaign menu",
+    "expand": "Expand navigation",
+    "collapse": "Collapse navigation"
   },
   "common": {
     "loading": "Loading…",
