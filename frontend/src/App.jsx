@@ -1066,7 +1066,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       ) : null}
 
       {activeView === "home" && isAuthenticated && hasPagePermission("tracker") && (
-        <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} />
+        <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} views={views} />
       )}
 
       {/* Campaign atlas */}
