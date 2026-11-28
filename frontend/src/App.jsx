@@ -8,6 +8,7 @@ import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheet
 import { CampaignEntryTools, EntryPrivacy } from "./CampaignEntryEditor";
 import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
+import { Achievements } from "./Achievements";
 import { CollaborativeDiary } from "./CollaborativeDiary";
 import { Chronicle } from "./Chronicle";
 import { Reputation } from "./Reputation";
@@ -1454,6 +1455,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           <h2>{t("nav.inventory")}</h2>
           <GroupInventory userId={userId} director={campaign?.is_director} revision={closedSessions}
             characters={campaign?.is_director ? characters : commentAuthors} />
+          <Achievements director={campaign?.is_director} groupsOnly />
         </section>
       )}
 
@@ -1684,6 +1686,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                               <details className="companion-sheet-details">
                                 <summary>{t("characterSheet.title")}</summary>
                                 <CharacterSheet character={companion} editable={false} />
+                                <Achievements characterId={companion.id} />
                                 <CampaignComments collection="characters" entryId={companion.id} authors={commentAuthors} />
                               </details>
                             </div>
@@ -1752,6 +1755,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 <CharacterSheet key={selectedCharacter.id} character={selectedCharacter} editable={canEditSelectedCharacter}
                   onSave={(draft) => saveCharacterSheet(selectedCharacter.id, draft)} />
 
+                <Achievements key={`achievements-${selectedCharacter.id}`} characterId={selectedCharacter.id}
+                  director={campaign?.is_director} characters={[selectedCharacter]} />
                 <CampaignComments key={`comments-${selectedCharacter.id}`} collection="characters"
                   entryId={selectedCharacter.id} authors={commentAuthors} />
 
