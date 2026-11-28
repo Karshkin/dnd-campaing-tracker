@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { campaignVisibility } from "./campaign";
-import { SelectRow, useCampaignMutation, useCampaignQuery } from "./ChronicleControls";
+import { campaignChronicle, campaignVisibility, supabase } from "./campaign";
+import { Choices, SelectRow, useCampaignMutation, useCampaignQuery } from "./ChronicleControls";
 
 const audiences = [
   { id: "discovered", name: "Descubierto por la campaña" },
@@ -36,11 +36,71 @@ function VisibilityForm({ kind, id, characters }) {
   </form>;
 }
 
+const secretAudiences = [
+  { id: "director", name: "Solo dirección" },
+  { id: "campaign", name: "Toda la campaña" },
+  { id: "characters", name: "Personajes seleccionados" },
+];
+
+function SecretEditor({ draft, characters, busy, save, cancel }) {
+  const [audience,setAudience] = useState(draft.audience ?? "director");
+  const [recipients,setRecipients] = useState(draft.recipients ?? []);
+  return <form className="form" onSubmit={(event) => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    save({ label: fields.get("label"), content: fields.get("content"), audience,
+      recipients: audience === "characters" ? recipients : [] });
+  }}>
+    <label>Título <input name="label" required maxLength={120} defaultValue={draft.label} /></label>
+    <label>Información <textarea name="content" required maxLength={20000} defaultValue={draft.content} /></label>
+    <SelectRow label="Revelar a" rows={secretAudiences} value={audience} onChange={setAudience} />
+    {audience === "characters" && <Choices label="Personajes autorizados" rows={characters}
+      values={recipients} onChange={setRecipients} />}
+    <div className="row">
+      <button disabled={busy || (audience === "characters" && !recipients.length)}>Guardar información</button>
+      <button type="button" onClick={cancel}>Cancelar</button>
+    </div>
+  </form>;
+}
+
+function EntitySecrets({ kind, id, characters }) {
+  const [draft,setDraft] = useState(null);
+  const load = useCallback(() => campaignChronicle.list("entity_secrets","label",{ kind, entity_id: String(id) }),[kind,id]);
+  const { data,error,refresh } = useCampaignQuery(load);
+  const mutation = useCampaignMutation(refresh);
+  return <section className="chronicle-flow">
+    {(error || mutation.error) && <p role="alert">{error || mutation.error}</p>}
+    {data?.length === 0 && <p>No hay información adicional visible.</p>}
+    {data?.length > 0 && <ul className="chronicle-list">{data.map((row) => <li key={row.id}>
+      <strong>{row.label}</strong>
+      <p className="chronicle-pre">{row.content}</p>
+      {characters && <div className="row">
+        <small>{secretAudiences.find(({ id }) => id === row.audience)?.name}</small>
+        <button type="button" onClick={() => setDraft(row)}>Editar información</button>
+        <button type="button" disabled={mutation.busy} onClick={() => {
+          if (window.confirm("¿Retirar esta información adicional?")) mutation.run(async () => {
+            const { error } = await supabase.from("entity_secrets").delete().eq("id",row.id);
+            if (error) throw error;
+          });
+        }}>Retirar información</button>
+      </div>}
+    </li>)}</ul>}
+    {characters && !draft && <button type="button" onClick={() => setDraft({})}>Añadir información</button>}
+    {draft && <SecretEditor key={draft.id ?? "new"} draft={draft} characters={characters}
+      busy={mutation.busy} cancel={() => setDraft(null)} save={async (fields) => {
+        if (await mutation.run(() => campaignChronicle.save("entity_secrets",
+          draft.id ? fields : { ...fields, kind, entity_id: String(id) },draft.id))) setDraft(null);
+      }} />}
+  </section>;
+}
+
 export function VisibilityEditor({ kind, id, characters }) {
   const [open, setOpen] = useState(false);
-  if (!characters) return null;
   return <details className="entity-visibility" onToggle={(event) => setOpen(event.currentTarget.open)}>
-    <summary>Visibilidad</summary>
-    {open && <VisibilityForm key={`${kind}:${id}`} kind={kind} id={id} characters={characters} />}
+    <summary>{characters ? "Visibilidad e información adicional" : "Información adicional"}</summary>
+    {open && <>
+      {characters && <VisibilityForm key={`${kind}:${id}`} kind={kind} id={id} characters={characters} />}
+      <EntitySecrets key={`info:${kind}:${id}`} kind={kind} id={id} characters={characters} />
+    </>}
   </details>;
 }
