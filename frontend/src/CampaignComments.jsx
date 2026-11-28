@@ -3,6 +3,17 @@ import { useTranslation } from "react-i18next";
 import { campaignComments } from "./campaign";
 import "./campaign-comments.css";
 
+export function CommentAuthor({ authors, value, onChange, allowDirector = false }) {
+  const { t } = useTranslation();
+  if (authors.length === 1 && !allowDirector) return <p>{t("comments.postingAs", { name: authors[0].name })}</p>;
+  return <label>{t("comments.asCharacter")}
+    <select value={value ?? ""} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
+      {allowDirector && <option value="">Director</option>}
+      {authors.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}
+    </select>
+  </label>;
+}
+
 function CommentThread({ collection, entryId, authors }) {
   const { t, i18n } = useTranslation();
   const [rows, setRows] = useState(null);
@@ -55,14 +66,7 @@ function CommentThread({ collection, entryId, authors }) {
     <div className="campaign-comment-thread">
       {authorId ? (
         <form className="form" onSubmit={submit}>
-          {authors.length > 1 ? (
-            <label>
-              {t("comments.asCharacter")}
-              <select value={authorId} onChange={(event) => setAuthor(Number(event.target.value))}>
-                {authors.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}
-              </select>
-            </label>
-          ) : <p>{t("comments.postingAs", { name: authors[0].name })}</p>}
+          <CommentAuthor authors={authors} value={authorId} onChange={setAuthor} />
           <label>
             {t("comments.comment")}
             <textarea rows={3} maxLength={2000} required value={body} onChange={(event) => setBody(event.target.value)} />
