@@ -1,3 +1,4 @@
+import { Merchants } from "./Merchants";
 import { MapRoutes, useMapRoutes } from "./MapRoutes";
 import { Dashboard } from "./Dashboard";
 import { Correspondence } from "./Correspondence";
@@ -80,7 +81,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["home", "correspondence", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "correspondence", "tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -369,6 +370,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       correspondence: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
+      merchants: ["tracker", "view"],
       characters: ["characters", "view"],
       bestiary: ["bestiary", "view"],
       organizations: ["organizations", "view"],
@@ -1290,6 +1292,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 )}
           </>}
         </section>
+      )}
+
+      {activeView === "merchants" && campaign && hasPagePermission("tracker") && (
+        <Merchants director={campaign.is_director} traders={hasPagePermission("characters", "edit") ? commentAuthors : []}
+          characters={characters} npcs={allies} factions={organizations} />
       )}
 
       {activeView === "inventory" && isAuthenticated && hasPagePermission("tracker") && (

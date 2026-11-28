@@ -34,6 +34,7 @@
     "removeError": "No se pudo quitar el miembro."
   },
   "nav": {
+    "merchants": "Tiendas y comerciantes",
     "home": "Inicio",
     "correspondence": "Correspondencia",
     "language": "Idioma",
