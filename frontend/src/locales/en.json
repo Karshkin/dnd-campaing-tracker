@@ -34,6 +34,7 @@
     "removeError": "Could not remove the member."
   },
   "nav": {
+    "calendar": "Calendar",
     "encounters": "Encounters",
     "home": "Home",
     "language": "Language",

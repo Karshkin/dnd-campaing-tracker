@@ -1,9 +1,9 @@
 import { useEffect, useId, useState } from "react";
-import { BookOpen, Boxes, Castle, CircleUser, House, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Swords, Users, X } from "lucide-react";
+import { BookOpen, Boxes, CalendarDays, Castle, CircleUser, House, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Swords, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const sections = [
-  ["campaign", [["home", "home", "tracker", House], ["chronicle", "chronicle", "tracker", BookOpen]]],
+  ["campaign", [["home", "home", "tracker", House], ["chronicle", "chronicle", "tracker", BookOpen], ["calendar", "calendar", "tracker", CalendarDays]]],
   ["world", [
     ["characters", "characters", "characters", Users], ["npcs", "npcs", "npcs", CircleUser],
     ["organizations", "organizations", "organizations", Castle], ["tracker", "locations", "tracker", Map],
