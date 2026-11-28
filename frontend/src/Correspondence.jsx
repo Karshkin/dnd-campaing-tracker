@@ -83,6 +83,53 @@ function Attachments({ entry, editable }) {
   </div>;
 }
 
+const linkTypes = {
+  npc_id: ["PNJ", "allies", "name"], organization_id: ["Organización", "organizations", "name"],
+  creature_id: ["Criatura", "creatures", "name"], place_id: ["Localización", "points_of_interest", "title"],
+  quest_id: ["Misión", "chronicle_quests", "title"],
+};
+const linkOptions = Object.entries(linkTypes).map(([id,[name]]) => ({ id,name }));
+
+function DocumentLinks({ document, editable }) {
+  const [kind,setKind] = useState("npc_id");
+  const [target,setTarget] = useState("");
+  const load = useCallback(async () => {
+    const values = Object.entries(linkTypes);
+    const [links,...lookups] = await Promise.all([
+      campaignChronicle.list("document_links","id",{ document_id: document.id }),
+      ...values.map(([, [,table,field]]) => campaignChronicle.list(table,field)),
+    ]);
+    return { links, targets: Object.fromEntries(values.map(([key],index) => [key,lookups[index]])) };
+  },[document.id]);
+  const { data,error,refresh } = useCampaignQuery(load);
+  const mutation = useCampaignMutation(refresh);
+  return <section className="chronicle-flow">
+    <h4>Vínculos de campaña</h4>
+    {(error || mutation.error) && <p role="alert">{error || mutation.error}</p>}
+    {data?.links.length > 0 && <ul className="chronicle-list">{data.links.map((link) => {
+      const field = Object.keys(linkTypes).find((key) => link[key] !== null);
+      const entity = data.targets[field]?.find(({ id }) => id === link[field]);
+      return <li key={link.id} className="row">
+        {linkTypes[field][0]} · {entity?.title ?? entity?.name ?? ""}
+        {editable && <button type="button" disabled={mutation.busy} onClick={() => mutation.run(() =>
+          value(supabase.from("document_links").delete().eq("id",link.id)))}>Quitar vínculo</button>}
+      </li>;
+    })}</ul>}
+    {editable && data && <form className="chronicle-actions" onSubmit={async (event) => {
+      event.preventDefault();
+      if (await mutation.run(() => campaignChronicle.save("document_links",{
+        document_id: document.id, [kind]: kind === "quest_id" ? target : Number(target),
+      }))) setTarget("");
+    }}>
+      <SelectRow label="Tipo de vínculo" rows={linkOptions} value={kind}
+        onChange={(key) => { setKind(key); setTarget(""); }} />
+      <SelectRow label="Entidad vinculada" rows={data.targets[kind]} value={target} onChange={setTarget}
+        empty="Seleccionar entidad" required />
+      <button disabled={!target || mutation.busy}>Vincular</button>
+    </form>}
+  </section>;
+}
+
 export function Correspondence({ director, authors, characters, userId }) {
   const [editing, setEditing] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -135,6 +182,7 @@ export function Correspondence({ director, authors, characters, userId }) {
         {editable && <button type="button" onClick={() => setEditing(current)}>Editar documento</button>}
       </div>
       <VisibilityEditor kind="campaign_documents" id={current.id} characters={director ? characters : null} />
+      <DocumentLinks key={`links:${current.id}`} document={current} editable={editable} />
       <Attachments key={current.id} entry={current} editable={editable} />
     </article>}
   </section>;

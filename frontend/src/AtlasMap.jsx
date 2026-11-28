@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 const markerKey = (row) => `${row.event_type ? "event" : "poi"}-${row.id}`;
 
-export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace }) {
+export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, linkedPlace, markerDetails }) {
   const { t } = useTranslation();
   const root = useRef(null);
   const canvas = useRef(null);
@@ -138,6 +138,7 @@ export function AtlasMap({ events, onMapClick, mapImageUrl, mapId, tempMarker, l
       <small>{t(`tracker.${active.event_type || active.poi_type}`)}</small>
       {active.description && <p>{active.description}</p>}
       {active.image_path && <img src={active.image_path} alt={active.title} />}
+      {markerDetails?.(active)}
     </section>}
   </div>;
 }
