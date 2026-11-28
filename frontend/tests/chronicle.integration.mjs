@@ -215,6 +215,14 @@ try {
   const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
     entity_kind, target: String(id), visibility: mode, recipients,
   });
+  const link = await insert(director, "document_links", { document_id: letter.id, npc_id: npc.id });
+  assert.equal(ok(await member.from("document_links").select("id").eq("id",link.id)).length,1);
+  assert.equal(ok(await onlooker.from("document_links").select("id").eq("id",link.id)).length,0);
+  assert.ok((await member.from("document_links").insert({ document_id: letter.id, creature_id: creatures[0].id })).error);
+  assert.ok((await director.from("document_links").insert({ document_id: letter.id, npc_id: foreignNpc.id })).error);
+  ok(await visibility(director, "allies", npc.id, "hidden"));
+  assert.equal(ok(await member.from("document_links").select("id").eq("id",link.id)).length,0);
+  ok(await visibility(director, "allies", npc.id, "discovered"));
   assert.ok((await visibility(member, "organizations", faction.id, "hidden")).error);
   assert.ok((await visibility(director, "allies", foreignNpc.id, "hidden")).error);
   const factionArtwork = `organizations/${faction.id}/${randomUUID()}.png`;
