@@ -1,8 +1,13 @@
 import { Merchants } from "./Merchants";
+import { MapRoutes, useMapRoutes } from "./MapRoutes";
+import { Dashboard } from "./Dashboard";
+import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { AtlasMap } from "./AtlasMap";
+import { AtlasDescription } from "./AtlasDescription";
+import { markerCategory } from "./atlasMarkers";
 import { AppHeader, AppShell, PageHeader, SideDialog } from "./CampaignShell";
-import { Castle, CircleUser, ImageIcon, Map, MapPin, RefreshCw, Skull } from "lucide-react";
+import { Castle, CircleUser, ImageIcon, Map, MapPin, MapPinned, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
@@ -76,7 +81,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "correspondence", "tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -107,6 +112,11 @@ function App() {
 function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin = false, onSaved }) {
   const [entityAnchor, setEntityAnchor] = useState(null);
   const [linkedPlace, setLinkedPlace] = useState(null);
+  const [hiddenMarkerTypes, setHiddenMarkerTypes] = useState([]);
+  const openAtlasPlace = (place) => {
+    setHiddenMarkerTypes((types) => types.filter((type) => type !== markerCategory(place)));
+    setLinkedPlace({ ...place });
+  };
   const [requestedDiary, setRequestedDiary] = useState(null);
   const [closedSessions, setClosedSessions] = useState(0);
   const [routeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
@@ -191,7 +201,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   const [placingMarker, setPlacingMarker] = useState(false);
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
+  const mapRoutes = useMapRoutes(trackerMap?.id);
+  const [activeMapRoute, setActiveMapRoute] = useState(null);
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
+  const mapPlaces = trackerMapPOIs.filter((row) => row.map_id === trackerMap?.id);
+  const listedPlaces = mapPlaces.filter((row) => !hiddenMarkerTypes.includes(markerCategory(row)));
 
   // POI draft (pending placement)
 
@@ -352,6 +366,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   useEffect(() => {
     const requiredPermissions = {
       tracker: ["tracker", "view"],
+      home: ["tracker", "view"],
+      correspondence: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       merchants: ["tracker", "view"],
@@ -1065,6 +1081,15 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
         </section>
       ) : null}
 
+      {activeView === "home" && isAuthenticated && hasPagePermission("tracker") && (
+        <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} views={views} />
+      )}
+
+      {activeView === "correspondence" && isAuthenticated && hasPagePermission("tracker") && (
+        <Correspondence director={campaign?.is_director} authors={commentAuthors} userId={userId}
+          characters={campaign?.is_director ? characters : [...commentAuthors, ...companions]} />
+      )}
+
       {/* Campaign atlas */}
       {activeView === "tracker" && canManageAdmin && manageMapsOpen && (
         <SideDialog title={t("admin.manageMaps")} close={() => setManageMapsOpen(false)}>
@@ -1095,23 +1120,28 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {activeView === "tracker" && isAuthenticated && (hasPagePermission("tracker") || canManageAdmin) && (
         <section className="atlas-page" id="campaign-map" tabIndex={-1}>
-          <PageHeader title={t("shell.atlas")} description={trackerMap?.description || campaign?.description}
+          <PageHeader title={t("shell.atlas")}
             actions={<>
-              {hasTrackerMap && hasPagePermission("tracker") && <label className="atlas-selector">{t("shell.map")}
-                <select value={trackerMap?.id ?? ""} onChange={(event) => {
+              {hasTrackerMap && hasPagePermission("tracker") && <div className="atlas-selector">
+                <label htmlFor="atlas-map-select">{t("shell.map")}</label>
+                <select id="atlas-map-select" value={trackerMap?.id ?? ""} onChange={(event) => {
                   const map = maps.find(({ id }) => id === Number(event.target.value));
                   setTrackerMap(map);
                   setTrackerMarkerDraft(null);
                   setPlacingMarker(false);
                   if (map) loadTrackerMapPOIs(map.id);
                 }}>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}</select>
-              </label>}
+              </div>}
               {trackerMap && hasPagePermission("tracker", "edit") && <button type="button" className="primary-action"
                 aria-pressed={placingMarker} onClick={() => setPlacingMarker(!placingMarker)}>
                 <MapPin size={17} aria-hidden="true" /> {t("shell.addLocation")}
               </button>}
-              {canManageAdmin && <button type="button" onClick={() => setManageMapsOpen(true)}>{t("admin.manageMaps")}</button>}
+              {canManageAdmin && <button type="button" onClick={() => setManageMapsOpen(true)}>
+                <MapPinned size={17} aria-hidden="true" /> {t("admin.manageMaps")}
+              </button>}
             </>} />
+          <AtlasDescription key={trackerMap?.id ?? "campaign"}
+            description={trackerMap ? trackerMap.description : campaign?.description} />
           {!hasTrackerMap && <div className="atlas-empty"><Map size={30} aria-hidden="true" />
             <h2>{t("tracker.noMapTitle")}</h2><p>{t("tracker.noMapMessage")}</p>
             <p>{canManageAdmin ? t("tracker.noMapAdminHint") : t("tracker.noMapUserHint")}</p>
@@ -1121,10 +1151,13 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             {placingMarker && <p className="atlas-hint" role="status">{t("tracker.clickToPlace")}</p>}
             <div className="atlas-layout">
               <AtlasMap mapId={trackerMap.id} linkedPlace={linkedPlace}
+                routes={(mapRoutes.data ?? []).filter((row) => row.id === activeMapRoute)}
+                places={trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)}
                 markerDetails={(marker) => <VisibilityEditor key={`${marker.event_type ?? "poi"}:${marker.id}`}
                   kind={marker.event_type ? "map_events" : "points_of_interest"} id={marker.id}
                   characters={campaign?.is_director ? characters : null} />}
-                events={[...events.filter((row) => row.map_id === trackerMap.id), ...trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)]}
+                events={[...events.filter((row) => row.map_id === trackerMap.id), ...mapPlaces]}
+                hiddenTypes={hiddenMarkerTypes} setHiddenTypes={setHiddenMarkerTypes}
                 mapImageUrl={trackerMap.file_path} tempMarker={trackerMarkerDraft}
                 onMapClick={placingMarker && hasPagePermission("tracker", "edit") ? (coords) => {
                   setTrackerMarkerDraft(coords);
@@ -1133,13 +1166,13 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 } : undefined} />
               <aside className="atlas-places">
                 <h2>{t("shell.discovered")}</h2>
-                {trackerMapPOIs.filter((row) => row.map_id === trackerMap.id).length ? <ul>
-                  {trackerMapPOIs.filter((row) => row.map_id === trackerMap.id).map((place) => <li key={place.id}>
-                    <button type="button" onClick={() => setLinkedPlace({ ...place })}><MapPin size={16} aria-hidden="true" />
+                {listedPlaces.length ? <ul>
+                  {listedPlaces.map((place) => <li key={place.id}>
+                    <button type="button" onClick={() => openAtlasPlace(place)}><MapPin size={16} aria-hidden="true" />
                       <span>{place.title}<small>{t(`tracker.${place.poi_type}`)}</small></span>
                     </button>
                   </li>)}
-                </ul> : <p>{t("shell.noPlaces")}</p>}
+                </ul> : <p>{t(mapPlaces.length ? "shell.noMatchingPlaces" : "shell.noPlaces")}</p>}
               </aside>
             </div>
 
@@ -1185,6 +1218,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   </form>
                 )}
 
+                {trackerMap && <MapRoutes key={trackerMap.id} mapId={trackerMap.id} routes={mapRoutes}
+                  places={trackerMapPOIs} director={campaign?.is_director} characters={characters}
+                  selected={activeMapRoute} select={setActiveMapRoute} />}
                 {trackerMap && <CampaignComments key={trackerMap.id} collection="maps" entryId={trackerMap.id} authors={commentAuthors} />}
                 {hasPagePermission("tracker", "edit") && trackerMap && (trackerMapPOIs.length > 0 || events.filter((e) => e.map_id === trackerMap.id).length > 0) && (
                   <details style={{ marginTop: "1rem" }}>
@@ -1366,7 +1402,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 const map = maps.find(({ id }) => id === entry.map_id);
                 if (map) {
                   setTrackerMap(map);
-                  setLinkedPlace(entry);
+                  openAtlasPlace(entry);
                   loadTrackerMapPOIs(map.id);
                 }
               }
