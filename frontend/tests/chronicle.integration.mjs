@@ -303,7 +303,7 @@ try {
   await playerPage.locator(".chronicle").getByRole("button", { name: "Galería", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".chronicle-cover img")?.naturalWidth > 0);
   await playerPage.setViewportSize({ width: 390, height: 844 });
-  const legacyDiary = await insert(admin, "diary_entries", { campaign_id: campaignId, title: "Registro anterior", content: "Debe conservarse" });
+  const legacyDiary = await insert(director, "diary_entries", { title: "Registro anterior", content: "Debe conservarse" });
   assert.equal(ok(await member.from("diary_entries").select("content").eq("id", legacyDiary.id).single()).content, "Debe conservarse");
   const draft = { title: "Bitácora privada", content: "Solo la tripulación", visibility: "private", session_id: session.id, author_character_id: character.id };
   assert.ok((await onlooker.from("diary_entries").insert(draft)).error);
@@ -359,7 +359,8 @@ try {
   await playerPage.reload();
   await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
   const questCard = playerPage.locator(".chronicle-panel").filter({ has: playerPage.getByRole("heading", { name: questDraft.title }) });
-  await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).check();
+  await questCard.getByRole("checkbox", { name: "Encontrar la llave" }).click();
+  await questCard.getByRole("checkbox", { name: "Encontrar la llave", checked: true }).waitFor();
   await playerPage.reload();
   await playerPage.getByRole("button", { name: "Misiones", exact: true }).click();
   await questCard.getByText("Recompensas: Oro", { exact: true }).waitFor();
