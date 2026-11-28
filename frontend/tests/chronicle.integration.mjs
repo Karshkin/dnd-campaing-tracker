@@ -222,6 +222,21 @@ try {
   assert.ok(ok(await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).signedUrl);
   assert.ok((await onlooker.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).error);
   ok(await visibility(director, "organizations", faction.id, "discovered"));
+  const { toHarptosDay, fromHarptosDay } = await import("../src/harptos.js");
+  const midsummer = toHarptosDay(1492, 9, 1);
+  assert.equal(fromHarptosDay(midsummer + 1).label, "Shieldmeet");
+  assert.equal(fromHarptosDay(toHarptosDay(1493, 9, 1) + 1).label, "Eleasis");
+  assert.ok((await member.rpc("set_harptos_date", { day_number: midsummer })).error);
+  ok(await director.rpc("set_harptos_date", { day_number: midsummer }));
+  const advances = await Promise.all([director.rpc("set_harptos_date", { advance: 1 }), director.rpc("set_harptos_date", { advance: 1 })]);
+  advances.forEach(ok);
+  assert.equal(ok(await member.from("harptos_clock").select("world_day").single()).world_day, midsummer + 2);
+  const travel = await insert(director, "harptos_events", { title: "Viaje por la costa", kind: "travel", duration: 3, world_day: midsummer, session_id: session.id });
+  const secretEvent = await insert(director, "harptos_events", { title: "Reunión secreta", private: true, world_day: midsummer });
+  assert.deepEqual(ok(await member.from("harptos_events").select("id")), [{ id: travel.id }]);
+  assert.ok(ok(await director.from("harptos_events").select("id").eq("id", secretEvent.id).single()));
+  assert.deepEqual(ok(await outside.from("harptos_events").select("id")), []);
+
   // Exercise the app's regular browser entry points with persisted data.
   server = await createServer({ server: { host: "127.0.0.1", port: 5178, strictPort: true } });
   await server.listen();
@@ -254,6 +269,9 @@ try {
   await page.getByRole("button", { name: "Inicio", exact: true }).click();
   await page.getByRole("heading", { name: "Panel del director" }).waitFor();
   await page.getByRole("heading", { name: "Actividad reciente", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Calendario", exact: true }).click();
+  await page.getByRole("heading", { name: "Viaje por la costa" }).waitFor();
+  await page.getByText("Sesión real · 2026-11-26", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   const sidebar = page.getByRole("navigation", { name: "Menú de campaña" });
   await page.getByRole("button", { name: "Contraer navegación" }).click();
