@@ -34,6 +34,7 @@
     "removeError": "Could not remove the member."
   },
   "nav": {
+    "merchants": "Shops and merchants",
     "language": "Language",
     "locations": "Locations and maps",
     "chronicle": "Adventure chronicle",

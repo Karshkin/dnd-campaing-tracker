@@ -1,3 +1,4 @@
+import { Merchants } from "./Merchants";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
@@ -261,7 +262,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["tracker", "chronicle", "inventory", "merchants", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -536,6 +537,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       tracker: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
+      merchants: ["tracker", "view"],
       characters: ["characters", "view"],
       bestiary: ["bestiary", "view"],
       organizations: ["organizations", "view"],
@@ -1448,6 +1450,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
         </section>
       ) : null}
+
+      {activeView === "merchants" && campaign && hasPagePermission("tracker") && (
+        <Merchants director={campaign.is_director} traders={hasPagePermission("characters", "edit") ? commentAuthors : []}
+          characters={characters} npcs={allies} factions={organizations} />
+      )}
 
       {activeView === "inventory" && isAuthenticated && hasPagePermission("tracker") && (
         <section className="card campaign-section">
