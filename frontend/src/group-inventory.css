@@ -19,3 +19,35 @@
 .group-my-contributions { margin-top: 0.9rem; }
 .group-my-contributions li { display: grid; gap: 0.35rem; }
 .group-my-contributions .group-inventory-actions { margin: 0; }
+.inventory-resources { margin-top: 1.5rem; }
+.inventory-resources summary { cursor: pointer; font-weight: bold; }
+.inventory-resources form { margin-top: 1rem; }
+
+.treasure-grid, .treasure-list {
+  display: grid;
+  gap: .75rem;
+  padding: 0;
+  list-style: none;
+}
+.treasure-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.treasure-grid li, .treasure-list li {
+  display: flex;
+  align-items: start;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid var(--gold-dark);
+  border-radius: .4rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.treasure-thumbnail {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  object-fit: cover;
+  border: 1px solid var(--gold-dark);
+  border-radius: .35rem;
+}
+.treasure-placeholder { background: var(--parchment); }

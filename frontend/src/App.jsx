@@ -7,7 +7,7 @@ import { CampaignComments } from "./CampaignComments";
 import { GroupInventory } from "./GroupInventory";
 import { Chronicle } from "./Chronicle";
 import { Reputation } from "./Reputation";
-import { ItemDetails, PersonalWallet } from "./Treasury";
+import { ItemArtwork, ItemDetails, PersonalWallet } from "./Treasury";
 import { CampaignAppearance, CampaignSelector, CampaignWorkspace } from "./CampaignWorkspace";
 import { campaignLink, campaignRequest, campaignSettings, readProfile, selectedCampaignRef, supabase } from "./campaign";
 const PAGE_KEYS = ["tracker", "characters", "bestiary", "organizations", "npcs", "admin"];
@@ -257,10 +257,10 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "resources", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
-  return views.includes(view) ? view : "tracker";
+  return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
 };
 
 function App() {
@@ -536,7 +536,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       tracker: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
-      resources: ["tracker", "view"],
       characters: ["characters", "view"],
       bestiary: ["bestiary", "view"],
       organizations: ["organizations", "view"],
@@ -1178,7 +1177,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
         <div className="tabs">
           <LanguagePicker />
           {isAuthenticated && hasPagePermission("tracker") &&
-            ["tracker", "chronicle", "inventory", "resources"].map((view) => (
+            ["tracker", "chronicle", "inventory"].map((view) => (
               <button key={view} type="button" onClick={() => navigate(view)}
                 className={activeView === view ? "active" : ""}
                 aria-current={activeView === view ? "page" : undefined}>
@@ -1544,10 +1543,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
         </section>
       )}
 
-      {activeView === "resources" && isAuthenticated && hasPagePermission("tracker") && (
-        <section className="campaign-section">
-          <article className="card">
-            <h2>{t('resources.title')}</h2>
+      {activeView === "inventory" && isAuthenticated && hasPagePermission("tracker") && (
+        <section className="campaign-section inventory-resources">
+          <details className="card">
+            <summary>{t('resources.title')}</summary>
             {hasPagePermission("tracker", "edit") && (
               <form onSubmit={submitResource} className="form resources-form">
                 <input
@@ -1609,7 +1608,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                 </li>
               ))}
             </ul>
-          </article>
+          </details>
 
           {selectedResourceImage && (
             <div
@@ -1949,6 +1948,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       {characterInventory.map((item) => (
                         <li key={item.id} className="row">
                           <span>
+                            {item.artwork_path && <ItemArtwork path={item.artwork_path} name={item.item_name} />}
                             <strong>{item.item_name}</strong> x{item.quantity}
                             {item.details ? <ItemDetails details={item.details} /> : item.description && ` - ${item.description}`}
                           </span>
