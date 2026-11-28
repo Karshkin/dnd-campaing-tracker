@@ -1,6 +1,8 @@
 import { HarptosCalendar } from "./HarptosCalendar";
 import { Encounters } from "./Encounters";
 import { Dashboard } from "./Dashboard";
+import { Investigation } from "./Investigation";
+import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { AtlasMap } from "./AtlasMap";
 import { AtlasDescription } from "./AtlasDescription";
@@ -81,7 +83,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["home", "calendar", "encounters", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "calendar", "encounters", "correspondence", "investigation", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -367,6 +369,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       home: ["tracker", "view"],
       calendar: ["tracker", "view"],
       encounters: ["tracker", "view"],
+      correspondence: ["tracker", "view"],
+      investigation: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       characters: ["characters", "view"],
@@ -1087,6 +1091,14 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
         <HarptosCalendar director={campaign?.is_director} characters={characters} />}
       {activeView === "encounters" && isAuthenticated && hasPagePermission("tracker") &&
         <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} npcs={allies} />}
+      {activeView === "investigation" && campaign && hasPagePermission("tracker") && (
+        <Investigation director={campaign.is_director} authors={commentAuthors} characters={characters} userId={userId} />
+      )}
+
+      {activeView === "correspondence" && isAuthenticated && hasPagePermission("tracker") && (
+        <Correspondence director={campaign?.is_director} authors={commentAuthors} userId={userId}
+          characters={campaign?.is_director ? characters : [...commentAuthors, ...companions]} />
+      )}
 
       {/* Campaign atlas */}
       {activeView === "tracker" && canManageAdmin && manageMapsOpen && (

@@ -91,6 +91,51 @@ try {
   assert.equal(ok(await onlooker.from("campaign_achievements").select("id").eq("id", groupAward.id)).length, 0);
   ok(await director.from("campaign_achievements").delete().eq("id", honor.id));
   assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id", honor.id)).length, 0);
+  const letter = await insert(director, "campaign_documents", {
+    kind: "letter", title: "Carta privada", body: "Presenta este sello en el faro", recipients: [character.id],
+  });
+  assert.equal(ok(await member.from("campaign_documents").select("id").eq("id", letter.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_documents").select("id").eq("id", letter.id)).length, 0);
+  assert.equal(ok(await outside.from("campaign_documents").select("id").eq("id", letter.id)).length, 0);
+  assert.ok((await onlooker.from("document_reads").insert({ document_id: letter.id })).error);
+  ok(await member.from("document_reads").insert({ document_id: letter.id }));
+  assert.equal(ok(await member.from("document_reads").select("document_id").single()).document_id, letter.id);
+  assert.ok((await member.from("campaign_documents").insert({
+    kind: "letter", title: "Firma ajena", body: "Falsa", author_character_id: otherCharacter.id,
+  })).error);
+  const documentImage = `${campaignId}/${letter.id}/${randomUUID()}.png`;
+  const imageData = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64");
+  ok(await director.storage.from("campaign-documents").upload(documentImage,imageData,{ contentType: "image/png" }));
+  cleanup.push(() => admin.storage.from("campaign-documents").remove([documentImage]));
+  await insert(director, "document_images", { document_id: letter.id, path: documentImage });
+  assert.ok(ok(await member.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).signedUrl);
+  assert.ok((await onlooker.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).error);
+  assert.equal(ok(await onlooker.from("document_images").select("id").eq("document_id",letter.id)).length,0);
+  const rumor = await insert(member, "campaign_rumors", {
+    title: "Luces en el faro", body: "Se distinguen tres luces", author_character_id: character.id,
+  });
+  assert.equal(rumor.author_user_id,player.user.id);
+  assert.equal(rumor.status,"unverified");
+  assert.ok((await member.from("campaign_rumors").update({ status: "confirmed" }).eq("id",rumor.id)).error);
+  ok(await director.from("campaign_rumors").update({ status: "confirmed" }).eq("id",rumor.id));
+  assert.equal(ok(await onlooker.from("campaign_rumors").select("status").eq("id",rumor.id).single()).status,"confirmed");
+  assert.equal(ok(await outside.from("campaign_rumors").select("id").eq("id",rumor.id)).length,0);
+  const notice = await insert(member, "investigation_nodes", { kind: "rumor", entity_id: rumor.id });
+  const proof = await insert(member, "investigation_nodes", { kind: "document", entity_id: letter.id });
+  const edge = await insert(member, "investigation_edges", { source: notice.id, target: proof.id, label: "El sello coincide" });
+  assert.equal(ok(await onlooker.from("investigation_nodes").select("id").eq("id",proof.id)).length,0);
+  assert.equal(ok(await onlooker.from("investigation_edges").select("id").eq("id",edge.id)).length,0);
+  assert.ok((await onlooker.from("investigation_edges").insert({ source: notice.id,target: proof.id })).error);
+  const position = ok(await member.from("investigation_nodes").update({ x: 25 }).eq("id",notice.id).select("x").single());
+  assert.equal(position.x,25);
+  const groupLetter = await insert(director, "campaign_documents", {
+    kind: "contract", title: "Contrato del grupo", body: "Proteged el faro", groups: [group],
+  });
+  assert.equal(ok(await member.from("campaign_documents").select("id").eq("id", groupLetter.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_documents").select("id").eq("id", groupLetter.id)).length, 0);
+  assert.ok((await director.from("campaign_documents").insert({
+    kind: "letter", title: "Grupo remoto", body: "Fuera de campaña", groups: [foreignGroup],
+  })).error);
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
   const secondNpc = await insert(director, "allies", { name: "Capitana" });
   const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
@@ -211,6 +256,14 @@ try {
   const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
     entity_kind, target: String(id), visibility: mode, recipients,
   });
+  const link = await insert(director, "document_links", { document_id: letter.id, npc_id: npc.id });
+  assert.equal(ok(await member.from("document_links").select("id").eq("id",link.id)).length,1);
+  assert.equal(ok(await onlooker.from("document_links").select("id").eq("id",link.id)).length,0);
+  assert.ok((await member.from("document_links").insert({ document_id: letter.id, creature_id: creatures[0].id })).error);
+  assert.ok((await director.from("document_links").insert({ document_id: letter.id, npc_id: foreignNpc.id })).error);
+  ok(await visibility(director, "allies", npc.id, "hidden"));
+  assert.equal(ok(await member.from("document_links").select("id").eq("id",link.id)).length,0);
+  ok(await visibility(director, "allies", npc.id, "discovered"));
   const secret = await insert(director, "entity_secrets", {
     kind: "organizations", entity_id: String(faction.id), label: "Sede oculta", content: "Detrás del faro",
   });
