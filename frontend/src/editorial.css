@@ -220,3 +220,5 @@ button, input, textarea, select { font-family: var(--body-font); }
 .entity-visibility fieldset { min-width: 0; border: 1px solid var(--line); }
 .entity-visibility fieldset label { display: flex; align-items: center; gap: .5rem; }
 .entity-visibility fieldset input[type="checkbox"] { width: auto; }
+.dashboard-header { display: flex; flex-wrap: wrap; justify-content: space-between; }
+.dashboard .card h3 { margin-top: 0; }

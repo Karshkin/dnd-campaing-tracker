@@ -1,3 +1,4 @@
+import { Dashboard } from "./Dashboard";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
@@ -260,7 +261,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "resources", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "tracker", "chronicle", "inventory", "resources", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return views.includes(view) ? view : "tracker";
@@ -537,6 +538,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   useEffect(() => {
     const requiredPermissions = {
       tracker: ["tracker", "view"],
+      home: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       resources: ["tracker", "view"],
@@ -1278,6 +1280,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </article>
         </section>
       ) : null}
+
+      {activeView === "home" && isAuthenticated && hasPagePermission("tracker") && (
+        <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} />
+      )}
 
       {/* TRACKER VIEW */}
       {activeView === "tracker" && canManageAdmin && (
