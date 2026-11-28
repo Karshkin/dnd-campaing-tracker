@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { BookOpen, Boxes, Castle, CircleUser, House, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Users, X } from "lucide-react";
+import { BookOpen, Boxes, Castle, CircleUser, House, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Swords, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const sections = [
@@ -11,7 +11,7 @@ const sections = [
     ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes], ["encounters", "encounters", "tracker", Swords], ["resources", "tracker", Boxes]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 
