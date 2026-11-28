@@ -1,4 +1,4 @@
-alter table public.chronicle_quests add unique(campaign_id,id);
+create unique index if not exists chronicle_quests_campaign_id_key on public.chronicle_quests(campaign_id,id);
 
 create table public.document_links (
   id uuid primary key default gen_random_uuid(),
