@@ -97,6 +97,23 @@ try {
   assert.ok(ok(await member.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).signedUrl);
   assert.ok((await onlooker.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).error);
   assert.equal(ok(await onlooker.from("document_images").select("id").eq("document_id",letter.id)).length,0);
+  const rumor = await insert(member, "campaign_rumors", {
+    title: "Luces en el faro", body: "Se distinguen tres luces", author_character_id: character.id,
+  });
+  assert.equal(rumor.author_user_id,player.user.id);
+  assert.equal(rumor.status,"unverified");
+  assert.ok((await member.from("campaign_rumors").update({ status: "confirmed" }).eq("id",rumor.id)).error);
+  ok(await director.from("campaign_rumors").update({ status: "confirmed" }).eq("id",rumor.id));
+  assert.equal(ok(await onlooker.from("campaign_rumors").select("status").eq("id",rumor.id).single()).status,"confirmed");
+  assert.equal(ok(await outside.from("campaign_rumors").select("id").eq("id",rumor.id)).length,0);
+  const notice = await insert(member, "investigation_nodes", { kind: "rumor", entity_id: rumor.id });
+  const proof = await insert(member, "investigation_nodes", { kind: "document", entity_id: letter.id });
+  const edge = await insert(member, "investigation_edges", { source: notice.id, target: proof.id, label: "El sello coincide" });
+  assert.equal(ok(await onlooker.from("investigation_nodes").select("id").eq("id",proof.id)).length,0);
+  assert.equal(ok(await onlooker.from("investigation_edges").select("id").eq("id",edge.id)).length,0);
+  assert.ok((await onlooker.from("investigation_edges").insert({ source: notice.id,target: proof.id })).error);
+  const position = ok(await member.from("investigation_nodes").update({ x: 25 }).eq("id",notice.id).select("x").single());
+  assert.equal(position.x,25);
   const groupLetter = await insert(director, "campaign_documents", {
     kind: "contract", title: "Contrato del grupo", body: "Proteged el faro", groups: [group],
   });
