@@ -1,9 +1,11 @@
 import { Encounters } from "./Encounters";
 import { Dashboard } from "./Dashboard";
 import { VisibilityEditor } from "./VisibilityEditor";
-import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
+import { AtlasMap } from "./AtlasMap";
+import { AppHeader, AppShell, PageHeader, SideDialog } from "./CampaignShell";
+import { Castle, CircleUser, ImageIcon, Map, MapPin, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 
 import { ImageGallery, CharacterSheet, defaultCharacterEmoji, SheetFields, sheetDraft } from "./CharacterSheet";
@@ -28,16 +30,11 @@ const languages = [
 
 function LanguagePicker() {
   const { t, i18n } = useTranslation();
-  return (
-    <div className="language-picker" role="group" aria-label={t("nav.language")}>
-      {languages.map(({ code, name }) => (
-        <button key={code} type="button" lang={code} aria-label={name} title={name}
-          aria-pressed={i18n.resolvedLanguage === code} onClick={() => i18n.changeLanguage(code)}>
-          <span className={`language-flag language-flag-${code}`} aria-hidden="true" />
-        </button>
-      ))}
-    </div>
-  );
+  return <label className="language-setting">{t("nav.language")}
+    <select value={i18n.resolvedLanguage} onChange={(event) => i18n.changeLanguage(event.target.value)}>
+      {languages.map(({ code, name }) => <option key={code} value={code} lang={code}>{name}</option>)}
+    </select>
+  </label>;
 }
 
 const emptyCollection = [];
@@ -79,189 +76,6 @@ function hasLevel(actual, required) {
   return (PERMISSION_RANK[actual] ?? 0) >= (PERMISSION_RANK[required] ?? 0);
 }
 
-// ===== MAP COMPONENT =====
-function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, mapId, tempMarker = null, linkedPlace }) {
-  const { t } = useTranslation();
-  const containerRef = useRef(null);
-  const innerRef = useRef(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [selection, setSelection] = useState(null);
-  const dragRef = useRef(null);
-  const didDragRef = useRef(false);
-
-  const markers = useMemo(() => {
-    return events.map((event) => ({
-      ...event,
-      markerKey: `${event.event_type ? "event" : "poi"}-${event.id}`,
-      top: `${event.latitude}%`,
-      left: `${event.longitude}%`,
-    }));
-  }, [events]);
-
-  useEffect(() => setSelection(null), [mapId]);
-
-  useEffect(() => {
-    if (linkedPlace?.map_id === mapId && linkedPlace) {
-      setSelection({ mapId, markerKey: `poi-${linkedPlace.id}` });
-    }
-  }, [linkedPlace, mapId]);
-
-  const activeMarker = selection?.mapId === mapId
-    ? markers.find((marker) => marker.markerKey === selection?.markerKey)
-    : null;
-
-  const handleWheel = useCallback((e) => {
-    e.preventDefault();
-    // Normalize delta across browsers/mice
-    const delta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY;
-    const factor = delta < 0 ? 1.12 : 1 / 1.12;
-    const bounds = containerRef.current.getBoundingClientRect();
-    const cx = e.clientX - bounds.left;
-    const cy = e.clientY - bounds.top;
-    setZoom((prevZoom) => {
-      const newZoom = Math.min(Math.max(prevZoom * factor, 0.5), 8);
-      setPan((prevPan) => ({
-        x: cx - (cx - prevPan.x) * (newZoom / prevZoom),
-        y: cy - (cy - prevPan.y) * (newZoom / prevZoom),
-      }));
-      return newZoom;
-    });
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.addEventListener("wheel", handleWheel, { passive: false });
-    return () => el.removeEventListener("wheel", handleWheel);
-  }, [handleWheel]);
-
-  const handleMouseDown = (e) => {
-    if (e.button !== 0) return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPanX: pan.x, startPanY: pan.y };
-    didDragRef.current = false;
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (e) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDragRef.current = true;
-    setPan({ x: dragRef.current.startPanX + dx, y: dragRef.current.startPanY + dy });
-  };
-
-  const handleMouseUp = () => {
-    dragRef.current = null;
-    setIsDragging(false);
-  };
-
-  const handleClick = (e) => {
-    if (readonly || !onMapClick || didDragRef.current) return;
-    if (!innerRef.current) return;
-    const innerBounds = innerRef.current.getBoundingClientRect();
-    const latitude = ((e.clientY - innerBounds.top) / innerBounds.height) * 100;
-    const longitude = ((e.clientX - innerBounds.left) / innerBounds.width) * 100;
-    if (latitude < 0 || latitude > 100 || longitude < 0 || longitude > 100) return;
-    onMapClick({ latitude: Number(latitude.toFixed(2)), longitude: Number(longitude.toFixed(2)) });
-  };
-
-  const handleMarkerClick = (e, marker) => {
-    e.stopPropagation();
-    if (e.detail !== 0 && didDragRef.current) return;
-    setSelection(activeMarker?.markerKey === marker.markerKey ? null : { mapId, markerKey: marker.markerKey });
-  };
-
-  const resetView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
-  const cursorStyle = isDragging ? "grabbing" : readonly ? "grab" : "crosshair";
-
-  return (
-    <div>
-      <div className="map-popup-anchor" onKeyDown={(event) => {
-        if (event.key === "Escape") setSelection(null);
-      }}>
-        <div
-          ref={containerRef}
-          className="map-wrapper"
-          style={{ cursor: cursorStyle, userSelect: "none", touchAction: "none" }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onClick={handleClick}
-        >
-          <div
-            ref={innerRef}
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: "0 0",
-              width: "100%",
-              position: "relative",
-            }}
-          >
-            <img
-              src={mapImageUrl || "/map-placeholder.svg"}
-              alt={t("tracker.worldMap")}
-              className="map-image"
-              draggable={false}
-            />
-            {tempMarker && (
-              <div
-                className="marker marker-temp"
-                style={{ top: `${tempMarker.latitude}%`, left: `${tempMarker.longitude}%` }}
-              />
-            )}
-            {markers.map((event) => (
-              <button
-                type="button"
-                key={event.markerKey}
-                className={`marker marker-${event.event_type || event.poi_type}${activeMarker?.markerKey === event.markerKey ? " marker-active" : ""}`}
-                style={{ top: event.top, left: event.left }}
-                title={event.title}
-                aria-label={event.title}
-                aria-expanded={activeMarker?.markerKey === event.markerKey}
-                onClick={(e) => handleMarkerClick(e, event)}
-              />
-            ))}
-          </div>
-        </div>
-        {activeMarker && (
-          <div
-            className={`marker-popup${activeMarker.latitude * zoom < 35 ? " marker-popup-below" : ""}`}
-            style={{
-              left: `clamp(var(--popup-half-width), calc(${activeMarker.longitude * zoom}% + ${pan.x}px), 100% - var(--popup-half-width))`,
-              top: `clamp(0px, calc(${activeMarker.latitude * zoom}% + ${pan.y}px), 100%)`,
-            }}
-          >
-            <div className="marker-popup-heading">
-              <strong>{activeMarker.title}</strong>
-              <button type="button" aria-label={t("tracker.closeMarker")} onClick={() => setSelection(null)}>
-                ×
-              </button>
-            </div>
-            <div className="marker-popup-content">
-              <span className="marker-popup-type">{t(`tracker.${activeMarker.event_type || activeMarker.poi_type}`)}</span>
-              {activeMarker.description && <p>{activeMarker.description}</p>}
-              {activeMarker.image_path && (
-                <img src={activeMarker.image_path} alt={activeMarker.title} className="marker-popup-image" />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.5rem" }}>
-        <small style={{ color: "var(--ink-mid)" }}>{t('tracker.legend')}</small>
-        <button type="button" onClick={resetView} style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}>{t('tracker.resetView')}</button>
-      </div>
-    </div>
-  );
-}
-
 // ===== MAIN APP =====
 const views = ["home", "encounters", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
@@ -294,6 +108,7 @@ function App() {
 function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin = false, onSaved }) {
   const [entityAnchor, setEntityAnchor] = useState(null);
   const [linkedPlace, setLinkedPlace] = useState(null);
+  const [requestedDiary, setRequestedDiary] = useState(null);
   const [closedSessions, setClosedSessions] = useState(0);
   const [routeView, setActiveView] = useState(() => session && ["login", "register"].includes(parseView())
     ? "tracker"
@@ -373,6 +188,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   const [orgError, setOrgError] = useState("");
 
   // Map state
+  const [manageMapsOpen, setManageMapsOpen] = useState(false);
+  const [placingMarker, setPlacingMarker] = useState(false);
   const [trackerMapRecord, setTrackerMap] = useState(null);
   const trackerMap = maps.find((row) => row.id === trackerMapRecord?.id) ?? null;
   const [trackerMapPOIs, setTrackerMapPOIs] = useState([]);   // tracker view
@@ -1122,28 +939,43 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
     else setUserManagementError(await readErrorMessage(response, t("campaigns.removeError")));
   };
 
+  function searchRows(rows, section, view, open = () => {}) {
+    return rows.map((row) => ({
+      key: `${section}:${row.id}`, title: row.title ?? row.name, section: t(`nav.${section}`),
+      open: () => { open(row); navigate(view); },
+    }));
+  }
+  function openRecord(view, prefix, record) {
+    setEntityAnchor({ view, id: `${prefix}-${record.id}` });
+  }
+  const diaryLinks = searchRows(diaryEntries, "chronicle", "chronicle", (row) => setRequestedDiary({ id: row.id }));
+  const searchEntries = [
+    ...diaryLinks,
+    ...searchRows(characters, "characters", "characters", loadCharacterDetails),
+    ...searchRows(organizations, "organizations", "organizations", (row) => {
+      setSelectedOrg(row);
+      openRecord("organizations", "organization_id", row);
+    }),
+    ...searchRows(allies, "npcs", "npcs", (row) => openRecord("npcs", "npc_id", row)),
+    ...searchRows(creatures, "bestiary", "bestiary", (row) => openRecord("bestiary", "creature_id", row)),
+    ...searchRows(maps, "locations", "tracker", (row) => {
+      setTrackerMap(row);
+      setTrackerMarkerDraft(null);
+      setPlacingMarker(false);
+      loadTrackerMapPOIs(row.id);
+    }),
+  ];
+  const notices = diaryLinks.slice(0, 5);
+
   return (
-    <main className={`campaign-theme editorial-shell ${isAuthenticated ? "with-sidebar" : ""}`} data-theme={campaign?.theme}
-      style={{ "--campaign-accent": campaign?.accent }}>
-      {isAuthenticated && <CampaignNavigation activeView={activeView} navigate={navigate}
-        permitted={hasPagePermission} logout={logout} tools={<LanguagePicker />} />}
-      <div className="editorial-content">
-      <header className={campaign ? "campaign-header" : undefined}>
-        {campaign && images[campaign.cover_path] && <img className="campaign-cover" src={images[campaign.cover_path]} alt="" />}
-        <div className="campaign-brand">
-          <img className="campaign-logo" src={images[campaign?.emblem_path] || `${import.meta.env.BASE_URL}d20.png`} width="64" height="64" alt="" />
-          <div>
-            <h1>{campaign?.name || t("app.title")}<span>{t("app.subtitle")}</span></h1>
-            {campaign?.description && <p className="campaign-description">{campaign.description}</p>}
-          </div>
-        </div>
-        {campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} isSuperadmin={isSuperadmin} />}
-        {!isAuthenticated && <div className="tabs">
-          <LanguagePicker />
-          {["login", "register"].map((view) => <button key={view} type="button"
-            className={activeView === view ? "active" : ""} onClick={() => navigate(view)}>{t(`nav.${view}`)}</button>)}
-        </div>}
-      </header>
+    <AppShell theme={campaign?.theme} accent={campaign?.accent} page={activeView}
+      sidebar={isAuthenticated ? <CampaignNavigation activeView={activeView} navigate={navigate} permitted={hasPagePermission} /> : null}
+      header={<AppHeader campaign={campaign} emblem={images[campaign?.emblem_path]}
+        selector={campaign && <CampaignSelector campaign={campaign} campaigns={campaigns} isSuperadmin={isSuperadmin} />}
+        user={currentUser?.username} entries={searchEntries} notices={notices}
+        preferences={<LanguagePicker />} logout={logout}
+        authActions={["login", "register"].map((view) => <button key={view} type="button"
+          aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)}>{t(`nav.${view}`)}</button>)} />}>
       {operationError && <p className="error" role="alert">{operationError}</p>}
       {(pending > 0 || (isAuthenticated && !currentUser && !operationError)) &&
         <p role="status">{t("common.loading")}</p>}
@@ -1242,12 +1074,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       {activeView === "encounters" && isAuthenticated && hasPagePermission("tracker") &&
         <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} />}
 
-      {/* TRACKER VIEW */}
-      {activeView === "tracker" && canManageAdmin && (
-        <section className="grid">
-          <article className="card wide">
-            <details className="character-sheet-panel">
-              <summary>{t('admin.manageMaps')}</summary>
+      {/* Campaign atlas */}
+      {activeView === "tracker" && canManageAdmin && manageMapsOpen && (
+        <SideDialog title={t("admin.manageMaps")} close={() => setManageMapsOpen(false)}>
               <form onSubmit={uploadMap} className="form">
                 <input name="name" placeholder={t('admin.mapName')} required />
                 <input name="description" placeholder={t('common.description')} />
@@ -1270,79 +1099,58 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   </li>
                 ))}
               </ul>
-            </details>
-          </article>
-        </section>
+        </SideDialog>
       )}
 
-      {activeView === "tracker" && isAuthenticated && hasPagePermission("tracker") ? (
-        <section className="grid">
-          <article className="card wide" id="campaign-map" tabIndex={-1}>
-            <h2>{t("nav.locations")}</h2>
-            {!hasTrackerMap ? (
-              <div
-                style={{
-                  padding: "2rem 1rem",
-                  display: "flex",
-                  justifyContent: "center",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "36rem",
-                    width: "100%",
-                    padding: "1.5rem 1.25rem",
-                    textAlign: "center",
-                    background: "linear-gradient(180deg, #fbf1df 0%, #f2dfbe 100%)",
-                    border: "2px solid #8b4513",
-                    borderRadius: "10px",
-                    boxShadow: "0 10px 24px rgba(77, 46, 18, 0.16)",
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}><Map aria-hidden="true" /></div>
-                  <h2 style={{ margin: "0 0 0.75rem", color: "#5d2f12" }}>{t('tracker.noMapTitle')}</h2>
-                  <p style={{ margin: "0 0 0.5rem", color: "var(--ink-mid)", lineHeight: 1.5 }}>{t('tracker.noMapMessage')}</p>
-                  <p style={{ margin: 0, color: "#7a5a33", lineHeight: 1.5 }}>
-                    {canManageAdmin ? t('tracker.noMapAdminHint') : t('tracker.noMapUserHint')}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                  <h2 style={{ margin: 0 }}>
-                    {trackerMap ? trackerMap.name : t('tracker.worldMap')}
-                  </h2>
-                  {maps.length > 1 && (
-                    <select
-                      value={trackerMap?.id ?? ""}
-                      onChange={(e) => {
-                        const map = maps.find((m) => m.id === Number(e.target.value));
-                        if (map) {
-                          setTrackerMap(map);
-                          loadTrackerMapPOIs(map.id);
-                        }
-                      }}
-                    >
-                      {maps.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                {hasPagePermission("tracker", "edit") && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "var(--ink-mid)" }}>{t('tracker.clickToPlace')}</p>}
-                {trackerMap && <VisibilityEditor kind="maps" id={trackerMap.id} characters={campaign?.is_director ? characters : null} />}
-                <MapView
-                  mapId={trackerMap?.id}
-                  linkedPlace={linkedPlace}
-                  events={[...events.filter((e) => e.map_id === (trackerMap?.id ?? null)), ...trackerMapPOIs]}
-                  onMapClick={hasPagePermission("tracker", "edit") ? (coords) => { setTrackerMarkerDraft(coords); setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" }); } : undefined}
-                  mapImageUrl={trackerMap ? trackerMap.file_path : null}
-                  tempMarker={trackerMarkerDraft}
-                />
+      {activeView === "tracker" && isAuthenticated && (hasPagePermission("tracker") || canManageAdmin) && (
+        <section className="atlas-page" id="campaign-map" tabIndex={-1}>
+          <PageHeader title={t("shell.atlas")} description={trackerMap?.description || campaign?.description}
+            actions={<>
+              {hasTrackerMap && hasPagePermission("tracker") && <label className="atlas-selector">{t("shell.map")}
+                <select value={trackerMap?.id ?? ""} onChange={(event) => {
+                  const map = maps.find(({ id }) => id === Number(event.target.value));
+                  setTrackerMap(map);
+                  setTrackerMarkerDraft(null);
+                  setPlacingMarker(false);
+                  if (map) loadTrackerMapPOIs(map.id);
+                }}>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}</select>
+              </label>}
+              {trackerMap && hasPagePermission("tracker", "edit") && <button type="button" className="primary-action"
+                aria-pressed={placingMarker} onClick={() => setPlacingMarker(!placingMarker)}>
+                <MapPin size={17} aria-hidden="true" /> {t("shell.addLocation")}
+              </button>}
+              {canManageAdmin && <button type="button" onClick={() => setManageMapsOpen(true)}>{t("admin.manageMaps")}</button>}
+            </>} />
+          {!hasTrackerMap && <div className="atlas-empty"><Map size={30} aria-hidden="true" />
+            <h2>{t("tracker.noMapTitle")}</h2><p>{t("tracker.noMapMessage")}</p>
+            <p>{canManageAdmin ? t("tracker.noMapAdminHint") : t("tracker.noMapUserHint")}</p>
+          </div>}
+          {trackerMap && hasPagePermission("tracker") && <>
+            <VisibilityEditor kind="maps" id={trackerMap.id} characters={campaign?.is_director ? characters : null} />
+            {placingMarker && <p className="atlas-hint" role="status">{t("tracker.clickToPlace")}</p>}
+            <div className="atlas-layout">
+              <AtlasMap mapId={trackerMap.id} linkedPlace={linkedPlace}
+                events={[...events.filter((row) => row.map_id === trackerMap.id), ...trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)]}
+                mapImageUrl={trackerMap.file_path} tempMarker={trackerMarkerDraft}
+                onMapClick={placingMarker && hasPagePermission("tracker", "edit") ? (coords) => {
+                  setTrackerMarkerDraft(coords);
+                  setTrackerMarkerForm({ title: "", description: "", kind: "poi", poi_type: "location", event_type: "event" });
+                  setPlacingMarker(false);
+                } : undefined} />
+              <aside className="atlas-places">
+                <h2>{t("shell.discovered")}</h2>
+                {trackerMapPOIs.filter((row) => row.map_id === trackerMap.id).length ? <ul>
+                  {trackerMapPOIs.filter((row) => row.map_id === trackerMap.id).map((place) => <li key={place.id}>
+                    <button type="button" onClick={() => setLinkedPlace({ ...place })}><MapPin size={16} aria-hidden="true" />
+                      <span>{place.title}<small>{t(`tracker.${place.poi_type}`)}</small></span>
+                    </button>
+                  </li>)}
+                </ul> : <p>{t("shell.noPlaces")}</p>}
+              </aside>
+            </div>
 
                 {hasPagePermission("tracker", "edit") && trackerMarkerDraft && (
-                  <form onSubmit={submitTrackerMarker} className="form" style={{ marginTop: "1rem", padding: "1rem", background: "#f9f0e0", border: "2px solid #8b4513", borderRadius: "4px" }}>
+                  <form onSubmit={submitTrackerMarker} className="form atlas-marker-form">
                     <p style={{ margin: 0 }}><strong>{t('tracker.newMarker')}</strong> {t('tracker.at')} {trackerMarkerDraft.latitude.toFixed(1)}%, {trackerMarkerDraft.longitude.toFixed(1)}%</p>
                     <input
                       value={trackerMarkerForm.title}
@@ -1448,21 +1256,19 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                               </div>
                             </div>
                           )}
+                          <VisibilityEditor kind="map_events" id={ev.id} characters={campaign?.is_director ? characters : null} />
                         </li>
                       ))}
                     </ul>
                   </details>
                 )}
-              </>
-            )}
-          </article>
-
+          </>}
         </section>
-      ) : null}
+      )}
 
       {activeView === "inventory" && isAuthenticated && hasPagePermission("tracker") && (
-        <section className="card campaign-section">
-          <h2>{t("nav.inventory")}</h2>
+        <section className="inventory-page">
+          <PageHeader title={t("nav.inventory")} />
           <GroupInventory userId={userId} director={campaign?.is_director} revision={closedSessions}
             characters={campaign?.is_director ? characters : commentAuthors} />
         </section>
@@ -1549,7 +1355,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {activeView === "chronicle" && campaign && hasPagePermission("tracker") && (
         <section className="campaign-section">
-          <Chronicle campaignId={campaign.id}
+          <Chronicle campaignId={campaign.id} requestedDiary={requestedDiary} campaignCover={images[campaign.cover_path]}
             director={campaign.is_director} characters={campaign.is_director ? characters : [...commentAuthors, ...companions]}
             organizations={organizations} allies={allies} creatures={creatures} onClose={() => {
               setClosedSessions((count) => count + 1);
@@ -1579,64 +1385,67 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {/* CHARACTERS VIEW */}
       {activeView === "characters" && isAuthenticated && hasPagePermission("characters", "view") ? (
-        <section className="grid">
-          <article className="card wide">
-            {!selectedCharacter && <h2>{t('characters.title')}</h2>}
+        <section className="character-page">
+          <article className="character-directory">
+            {!selectedCharacter && <PageHeader title={t("characters.title")} />}
             {!selectedCharacter ? (
               <>
                 {hasPagePermission("characters", "edit") && (
-                  <form onSubmit={submitCharacter} className="form">
-                  <input
-                    value={characterDraft.name}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, name: e.target.value }))}
-                    placeholder={t('characters.namePlaceholder')}
-                    required
-                  />
-                  <input
-                    value={characterDraft.character_class}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, character_class: e.target.value }))}
-                    placeholder={t('characters.class')}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={characterDraft.level}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, level: Number(e.target.value) }))}
-                    placeholder={t('characters.level')}
-                  />
-                  <input
-                    value={characterDraft.race}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, race: e.target.value }))}
-                    placeholder={t('characters.race')}
-                  />
-                  <select
-                    value={characterDraft.organization_id ?? ""}
-                    onChange={(e) => setCharacterDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
-                  >
-                    <option value="">{t('characters.noOrg')}</option>
-                    {organizations.map((org) => (
-                      <option key={org.id} value={org.id}>{org.name}</option>
-                    ))}
-                  </select>
-                  <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-                    <ImageIcon size={16} aria-hidden="true" /> {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
-                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
-                  </label>
-                  <details className="character-sheet-panel">
-                    <summary>{t("characterSheet.optionalDetails")}</summary>
-                    <SheetFields draft={characterDraft}
-                      onChange={(field, value) => setCharacterDraft((current) => ({ ...current, [field]: value }))} />
+                  <details className="character-creation">
+                    <summary>{t('characters.create')}</summary>
+                    <form onSubmit={submitCharacter} className="form">
+                    <input
+                      value={characterDraft.name}
+                      onChange={(e) => setCharacterDraft((old) => ({ ...old, name: e.target.value }))}
+                      placeholder={t('characters.namePlaceholder')}
+                      required
+                    />
+                    <input
+                      value={characterDraft.character_class}
+                      onChange={(e) => setCharacterDraft((old) => ({ ...old, character_class: e.target.value }))}
+                      placeholder={t('characters.class')}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={characterDraft.level}
+                      onChange={(e) => setCharacterDraft((old) => ({ ...old, level: Number(e.target.value) }))}
+                      placeholder={t('characters.level')}
+                    />
+                    <input
+                      value={characterDraft.race}
+                      onChange={(e) => setCharacterDraft((old) => ({ ...old, race: e.target.value }))}
+                      placeholder={t('characters.race')}
+                    />
+                    <select
+                      value={characterDraft.organization_id ?? ""}
+                      onChange={(e) => setCharacterDraft((old) => ({ ...old, organization_id: e.target.value ? Number(e.target.value) : null }))}
+                    >
+                      <option value="">{t('characters.noOrg')}</option>
+                      {organizations.map((org) => (
+                        <option key={org.id} value={org.id}>{org.name}</option>
+                      ))}
+                    </select>
+                    <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+                      <ImageIcon size={16} aria-hidden="true" /> {characterImageFile ? characterImageFile.name : t('characters.addPortrait')}
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setCharacterImageFile(e.target.files[0] || null)} />
+                    </label>
+                    <details className="character-sheet-panel">
+                      <summary>{t("characterSheet.optionalDetails")}</summary>
+                      <SheetFields draft={characterDraft}
+                        onChange={(field, value) => setCharacterDraft((current) => ({ ...current, [field]: value }))} />
+                    </details>
+                    <button type="submit">{t('characters.create')}</button>
+                    </form>
                   </details>
-                  <button type="submit">{t('characters.create')}</button>
-                  </form>
                 )}
                 {hasPagePermission("characters", "edit") && characterError ? <p className="error">{characterError}</p> : null}
 
                 <h3>{t(currentUser?.is_admin ? 'characters.allCharacters' : 'characters.yourCharacters')}</h3>
-                <ul>
+                <ul className="character-roster">
                   {characters.map((char) => (
-                    <li key={char.id} className="row" style={{ alignItems: "center", gap: "0.75rem" }}>
+                    <li key={char.id} className="character-roster-item">
                       {char.image_path ? (
                         <img
                           src={char.image_path}
@@ -1648,9 +1457,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                       ) : (
                         <span style={{ fontSize: "2rem", flexShrink: 0 }}>{char.emoji || defaultCharacterEmoji}</span>
                       )}
-                      <span style={{ flexGrow: 1 }}>
+                      <span className="character-roster-summary">
                         {char.image_path && char.emoji && <span aria-hidden="true">{char.emoji} </span>}
-                        <strong>{char.name}</strong> - {t('characters.lvl')} {char.level} {char.race} {char.character_class}
+                        <strong>{char.name}</strong><span>{t('characters.lvl')} {char.level} {char.race} {char.character_class}</span>
                         {currentUser?.is_admin && char.owner?.username && (
                           <small> · {t('characters.owner', { name: char.owner.username })}</small>
                         )}
@@ -1660,7 +1469,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                           </span>
                         )}
                       </span>
-                      <div>
+                      <div className="row">
                         <button type="button" onClick={() => loadCharacterDetails(char)}>
                           {t('common.view')}
                         </button>
@@ -1874,9 +1683,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {/* BESTIARY VIEW */}
       {activeView === "bestiary" && hasPagePermission("bestiary") ? (
-        <section className="grid">
-          <article className="card wide">
-            <h2>{t('bestiary.title')}</h2>
+        <section className="bestiary-page">
+          <article className="bestiary-directory">
+            <PageHeader title={t("bestiary.title")} />
             {hasPagePermission("bestiary", "edit") && (
               <details className="character-sheet-panel">
                 <summary>{t("admin.addCreature")}</summary>
@@ -1955,9 +1764,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
               </details>
             )}
             <h3>{t('bestiary.encountered')}</h3>
-            <ul>
+            <ul className="statblock-list">
               {creatures.map((creature) => (
-                <li key={creature.id} id={`creature_id-${creature.id}`} tabIndex={-1} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <li key={creature.id} id={`creature_id-${creature.id}`} tabIndex={-1}>
                   {creature.image_path ? (
                     <img
                       src={creature.image_path}
@@ -1976,7 +1785,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   )}
                   <div className="campaign-entry-content">
                     <div className="row">
-                      <strong>{creature.name}</strong>
+                      <h2>{creature.name}</h2>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
                         {hasPagePermission("bestiary", "edit") && creature.image_path && (
                           <label style={{ fontSize: "0.8rem", cursor: "pointer" }} title={t('common.replaceImage')}>
@@ -1989,11 +1798,17 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                         )}
                       </div>
                     </div>
-                    {creature.creature_type && <p><strong>{t('bestiary.type')}</strong> {creature.creature_type}</p>}
-                    {creature.challenge_rating && <p><strong>{t('bestiary.cr')}</strong> {creature.challenge_rating}</p>}
-                    {creature.armor_class > 0 && <p><strong>{t('bestiary.ac')}</strong> {creature.armor_class}</p>}
-                    {creature.hit_points && <p><strong>{t('bestiary.hp')}</strong> {creature.hit_points}</p>}
-                    {creature.speed && <p><strong>{t('bestiary.speed')}</strong> {creature.speed}</p>}
+                    <dl className="creature-statistics">
+                      {[
+                        [t("bestiary.type"), creature.creature_type],
+                        [t("admin.challengeRating"), creature.challenge_rating],
+                        [t("admin.armorClass"), creature.armor_class],
+                        [t("admin.hitPoints"), creature.hit_points],
+                        [t("admin.speedPlaceholder"), creature.speed],
+                      ].filter(([, value]) => value !== null && value !== undefined && value !== "").map(([label, value]) => (
+                        <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+                      ))}
+                    </dl>
                     {creature.abilities && <p><strong>{t('bestiary.abilities')}</strong> {creature.abilities}</p>}
                     {creature.weaknesses && <p><strong>{t('bestiary.weaknesses')}</strong> {creature.weaknesses}</p>}
                     {creature.resistances && <p><strong>{t('bestiary.resistances')}</strong> {creature.resistances}</p>}
@@ -2025,9 +1840,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {/* ORGANIZATIONS VIEW */}
       {activeView === "organizations" && hasPagePermission("organizations") ? (
-        <section style={{ padding: "1rem", maxWidth: "1200px", margin: "0 auto" }}>
-          <div className="card wide">
-            <h2>{t('organizations.title')}</h2>
+        <section className="organization-page">
+          <div className="organization-directory">
+            <PageHeader title={t("organizations.title")} />
             {hasPagePermission("organizations", "edit") && (
               <details className="character-sheet-panel">
                 <summary>{t("admin.addOrg")}</summary>
@@ -2058,7 +1873,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
               <p style={{ textAlign: "center", marginTop: "1rem" }}>{t('organizations.empty')}</p>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+            <div className="organization-grid">
               {organizations.map((org) => {
                 const memberCount = allies.filter((a) => a.organization_id === org.id).length;
                 const isSelected = selectedOrg?.id === org.id;
@@ -2066,24 +1881,12 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                   <div
                     key={org.id}
                     onClick={() => setSelectedOrg(isSelected ? null : org)}
-                    style={{
-                      width: "220px",
-                      border: `2px solid ${isSelected ? "var(--sienna)" : "var(--gold-dark)"}`,
-                      borderRadius: "var(--border-radius)",
-                      overflow: "hidden",
-                      cursor: "pointer",
-                      background: isSelected
-                        ? "var(--surface)"
-                        : "var(--surface)",
-                      boxShadow: isSelected
-                        ? "0 4px 16px rgba(107,45,15,0.35), 0 0 0 1px var(--gold)"
-                        : "0 2px 8px rgba(0,0,0,0.25)",
-                      transition: "box-shadow 0.15s, border-color 0.15s",
-                    }}
+                    className="organization-tile"
+                    data-active={isSelected}
                   >
-                    <div style={{ height: "120px", background: "var(--parchment-dark)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                    <div className="organization-emblem">
                       {org.image_path ? (
-                        <img src={org.image_path} alt={org.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={org.image_path} alt={org.name} className="organization-emblem-image" />
                       ) : (
                         <span style={{ fontSize: "3rem" }}><Castle aria-hidden="true" /></span>
                       )}
@@ -2112,8 +1915,8 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             </div>
 
             {selectedOrg && (
-              <div key={selectedOrg.id} id={`organization_id-${selectedOrg.id}`} tabIndex={-1} style={{ marginTop: "1.5rem", border: "2px solid var(--sienna)", borderRadius: "var(--border-radius)", overflow: "hidden", background: "var(--surface)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", background: "rgba(107,45,15,0.08)", borderBottom: "1px solid var(--gold-dark)" }}>
+              <div key={selectedOrg.id} id={`organization_id-${selectedOrg.id}`} tabIndex={-1} className="organization-profile">
+                <div className="organization-profile-heading">
                   {selectedOrg.image_path && (
                     <img
                       src={selectedOrg.image_path}
@@ -2144,7 +1947,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                           {ally.image_path ? (
                             <img src={ally.image_path} alt={ally.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "50%", border: "2px solid var(--gold-dark)" }} />
                           ) : (
-                            <span style={{ fontSize: "1.4rem" }}>👤</span>
+                            <span style={{ fontSize: "1.4rem" }}><CircleUser aria-hidden="true" /></span>
                           )}
                           <div>
                             <strong style={{ fontSize: "0.9rem" }}>{ally.name}</strong>
@@ -2169,9 +1972,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {/* NPCS VIEW */}
       {activeView === "npcs" && hasPagePermission("npcs") ? (
-        <section className="grid">
-          <article className="card wide">
-            <h2>{t('npcs.title')}</h2>
+        <section className="npc-page">
+          <article className="npc-directory">
+            <PageHeader title={t("npcs.title")} />
             {hasPagePermission("npcs", "edit") && (
               <details className="character-sheet-panel">
                 <summary>{t("admin.addNPC")}</summary>
@@ -2225,31 +2028,31 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             )}
 
             <h3>{t('npcs.known')}</h3>
-            <ul>
+            <ul className="portrait-list">
               {allies.map((ally) => {
                 const org = organizations.find((o) => o.id === ally.organization_id);
                 return (
-                  <li key={ally.id} id={`npc_id-${ally.id}`} tabIndex={-1} style={{ marginBottom: "1rem", padding: "0.5rem", border: "1px solid #ddd", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                  <li key={ally.id} id={`npc_id-${ally.id}`} tabIndex={-1}>
                     {ally.image_path ? (
                       <img
                         src={ally.image_path}
                         alt={ally.name}
                         onClick={() => setSelectedAllyImage(ally.image_path)}
-                        style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "50%", cursor: "pointer", border: "2px solid #8b4513", flexShrink: 0 }}
+                        className="npc-portrait"
                         title={t('common.clickToView')}
                       />
                      ) : hasPagePermission("npcs", "edit") ? (
-                      <label style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px dashed #8b4513", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "1.4rem" }} title={t('npcs.addPortrait')}>
-                        👤
+                      <label className="npc-portrait" title={t('npcs.addPortrait')}>
+                        <CircleUser aria-hidden="true" />
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) uploadAllyImage(ally.id, e.target.files[0]); }} />
                       </label>
                     ) : (
-                      <span style={{ width: "56px", height: "56px", borderRadius: "50%", border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>👤</span>
+                      <span className="npc-portrait"><CircleUser aria-hidden="true" /></span>
                     )}
                     <div className="campaign-entry-content">
                       <div className="row">
                         <div>
-                          <strong>{ally.name}</strong>
+                          <h2>{ally.name}</h2>
                           {org && (
                             <span
                               onClick={() => { navigate("organizations"); setSelectedOrg(org); }}
@@ -2315,12 +2118,12 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {/* ADMIN VIEW (/admin) */}
       {activeView === "admin" && isAuthenticated && hasPagePermission("admin", "admin") ? (
-        <section className="grid">
+        <section className="admin-page">
           {currentUser?.is_admin && campaign && (
             <CampaignAppearance campaign={campaign} images={images} onSaved={onSaved} />
           )}
-          <article className="card wide">
-            <h2>{t('admin.userManagement')}</h2>
+          <article className="admin-directory">
+            <PageHeader title={t("admin.userManagement")} />
             {isSuperadmin && <p>{t("campaigns.superadmin")}</p>}
             <form onSubmit={inviteMember} className="form">
               <label>{t("campaigns.inviteLabel")}
@@ -2411,8 +2214,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </article>
         </section>
       ) : null}
-      </div>
-    </main>
+    </AppShell>
   );
 }
 
