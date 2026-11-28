@@ -1119,6 +1119,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
             {placingMarker && <p className="atlas-hint" role="status">{t("tracker.clickToPlace")}</p>}
             <div className="atlas-layout">
               <AtlasMap mapId={trackerMap.id} linkedPlace={linkedPlace}
+                markerDetails={(marker) => <VisibilityEditor key={`${marker.event_type ?? "poi"}:${marker.id}`}
+                  kind={marker.event_type ? "map_events" : "points_of_interest"} id={marker.id}
+                  characters={campaign?.is_director ? characters : null} />}
                 events={[...events.filter((row) => row.map_id === trackerMap.id), ...trackerMapPOIs.filter((row) => row.map_id === trackerMap.id)]}
                 mapImageUrl={trackerMap.file_path} tempMarker={trackerMarkerDraft}
                 onMapClick={placingMarker && hasPagePermission("tracker", "edit") ? (coords) => {
@@ -1187,7 +1190,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                     <ul style={{ marginTop: "0.5rem" }}>
                       {trackerMapPOIs.map((poi) => (
                         <li key={`poi-${poi.id}`}>
-                          <VisibilityEditor kind="points_of_interest" id={poi.id} characters={campaign?.is_director ? characters : null} />
                           {editingPoi?.id === poi.id ? (
                             <form onSubmit={updatePOI} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                               <input value={editingPoi.title} onChange={(e) => setEditingPoi((p) => ({ ...p, title: e.target.value }))} required style={{ flex: "1 1 120px" }} />
@@ -1245,7 +1247,6 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
                               </div>
                             </div>
                           )}
-                          <VisibilityEditor kind="map_events" id={ev.id} characters={campaign?.is_director ? characters : null} />
                         </li>
                       ))}
                     </ul>

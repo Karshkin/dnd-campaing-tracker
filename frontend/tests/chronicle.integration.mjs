@@ -187,6 +187,20 @@ try {
   const visibility = (client, entity_kind, id, mode, recipients = []) => client.rpc("manage_visibility", {
     entity_kind, target: String(id), visibility: mode, recipients,
   });
+  const secret = await insert(director, "entity_secrets", {
+    kind: "organizations", entity_id: String(faction.id), label: "Sede oculta", content: "Detrás del faro",
+  });
+  assert.equal(ok(await member.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  assert.ok((await member.from("entity_secrets").insert({
+    kind: "organizations", entity_id: String(faction.id), label: "Otro", content: "Texto",
+  })).error);
+  ok(await director.from("entity_secrets").update({ audience: "characters", recipients: [character.id] }).eq("id",secret.id));
+  assert.equal(ok(await member.from("entity_secrets").select("content").eq("id",secret.id).single()).content,"Detrás del faro");
+  assert.equal(ok(await onlooker.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  assert.equal(ok(await other.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  ok(await visibility(director, "organizations", faction.id, "hidden"));
+  assert.equal(ok(await member.from("entity_secrets").select("id").eq("id",secret.id)).length,0);
+  ok(await visibility(director, "organizations", faction.id, "discovered"));
   assert.ok((await visibility(member, "organizations", faction.id, "hidden")).error);
   assert.ok((await visibility(director, "allies", foreignNpc.id, "hidden")).error);
   const factionArtwork = `organizations/${faction.id}/${randomUUID()}.png`;
