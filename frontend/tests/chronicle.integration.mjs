@@ -81,6 +81,11 @@ try {
   const secondNpc = await insert(director, "allies", { name: "Capitana" });
   const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
   const map = await insert(director, "maps", { name: "Costa" });
+  const mapPath = `maps/${map.id}/${randomUUID()}.png`;
+  const dot = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64");
+  ok(await director.storage.from("campaign-files").upload(mapPath, new Blob([dot], { type: "image/png" })));
+  cleanup.push(() => admin.storage.from("campaign-files").remove([mapPath]));
+  ok(await director.from("maps").update({ is_active: true, file_path: mapPath }).eq("id", map.id));
   const places = await Promise.all(["Faro viejo", "Embarcadero"].map((title) => insert(director, "points_of_interest", {
     title, map_id: map.id, latitude: 10, longitude: 10,
   })));
@@ -240,6 +245,22 @@ try {
   await page.getByRole("button", { name: "Contraer navegación" }).click();
   assert.ok(await sidebar.getByRole("button", { name: "Inventario grupal" }).isVisible());
   await page.getByRole("button", { name: "Expandir navegación" }).click();
+  await page.getByRole("button", { name: "Localizaciones y mapas", exact: true }).click();
+  await page.getByRole("heading", { name: "Atlas de campaña", exact: true }).waitFor();
+  await page.locator(".atlas-places").getByRole("button", { name: /Faro viejo/ }).click();
+  await page.getByRole("region", { name: "Faro viejo" }).waitFor();
+  await page.getByRole("button", { name: "Cerrar punto del mapa" }).click();
+  await page.getByRole("button", { name: "Acercar", exact: true }).click();
+  await page.getByRole("button", { name: "Pantalla completa", exact: true }).click();
+  await page.getByRole("button", { name: "Salir de pantalla completa", exact: true }).click();
+  await page.getByRole("button", { name: /Gestionar mapas|Administrar mapas|Gestión de mapas/i }).click();
+  await page.getByRole("dialog").waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page.locator('summary[aria-label="Buscar en la campaña"]').click();
+  await page.getByRole("searchbox").fill("Vigía");
+  await page.getByRole("button", { name: /Vigía/ }).click();
+  await page.locator(`#npc_id-${npc.id}`).waitFor();
+  await page.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   const chronicle = page.locator(".chronicle");
   await chronicle.getByText("Galería", { exact: true }).click();
   await chronicle.getByLabel("Imagen", { exact: true }).setInputFiles({
@@ -328,7 +349,7 @@ try {
   await playerPage.getByPlaceholder("Correo", { exact: false }).fill(player.email);
   await playerPage.locator('input[type="password"]').fill(password);
   await playerPage.locator('button[type="submit"]').click();
-  await playerPage.getByRole("heading", { name: "Localizaciones y mapas", exact: true }).waitFor();
+  await playerPage.getByRole("heading", { name: "Atlas de campaña", exact: true }).waitFor();
   await playerPage.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   await playerPage.getByRole("heading", { name: "Epílogo", exact: true }).waitFor();
   assert.equal(await playerPage.getByText("Solo DM", { exact: true }).count(), 0);
