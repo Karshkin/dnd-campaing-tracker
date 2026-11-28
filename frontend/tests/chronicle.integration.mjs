@@ -77,6 +77,34 @@ try {
   const secondFaction = await insert(director, "organizations", { name: "Orden de la costa" });
   const character = await insert(member, "characters", { name: "Niebla" });
   const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
+  const letter = await insert(director, "campaign_documents", {
+    kind: "letter", title: "Carta privada", body: "Presenta este sello en el faro", recipients: [character.id],
+  });
+  assert.equal(ok(await member.from("campaign_documents").select("id").eq("id", letter.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_documents").select("id").eq("id", letter.id)).length, 0);
+  assert.equal(ok(await outside.from("campaign_documents").select("id").eq("id", letter.id)).length, 0);
+  assert.ok((await onlooker.from("document_reads").insert({ document_id: letter.id })).error);
+  ok(await member.from("document_reads").insert({ document_id: letter.id }));
+  assert.equal(ok(await member.from("document_reads").select("document_id").single()).document_id, letter.id);
+  assert.ok((await member.from("campaign_documents").insert({
+    kind: "letter", title: "Firma ajena", body: "Falsa", author_character_id: otherCharacter.id,
+  })).error);
+  const documentImage = `${campaignId}/${letter.id}/${randomUUID()}.png`;
+  const imageData = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3sAAAAASUVORK5CYII=", "base64");
+  ok(await director.storage.from("campaign-documents").upload(documentImage,imageData,{ contentType: "image/png" }));
+  cleanup.push(() => admin.storage.from("campaign-documents").remove([documentImage]));
+  await insert(director, "document_images", { document_id: letter.id, path: documentImage });
+  assert.ok(ok(await member.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).signedUrl);
+  assert.ok((await onlooker.storage.from("campaign-documents").createSignedUrl(documentImage, 60)).error);
+  assert.equal(ok(await onlooker.from("document_images").select("id").eq("document_id",letter.id)).length,0);
+  const groupLetter = await insert(director, "campaign_documents", {
+    kind: "contract", title: "Contrato del grupo", body: "Proteged el faro", groups: [group],
+  });
+  assert.equal(ok(await member.from("campaign_documents").select("id").eq("id", groupLetter.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_documents").select("id").eq("id", groupLetter.id)).length, 0);
+  assert.ok((await director.from("campaign_documents").insert({
+    kind: "letter", title: "Grupo remoto", body: "Fuera de campaña", groups: [foreignGroup],
+  })).error);
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
   const secondNpc = await insert(director, "allies", { name: "Capitana" });
   const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));

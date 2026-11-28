@@ -1,3 +1,4 @@
+import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { Castle, ImageIcon, Map, RefreshCw, Skull } from "lucide-react";
 import { CampaignNavigation } from "./CampaignNavigation";
@@ -261,7 +262,7 @@ function MapView({ events, onMapClick, readonly = false, mapImageUrl = null, map
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["correspondence", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -534,6 +535,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   useEffect(() => {
     const requiredPermissions = {
       tracker: ["tracker", "view"],
+      correspondence: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       characters: ["characters", "view"],
@@ -1230,6 +1232,11 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </article>
         </section>
       ) : null}
+
+      {activeView === "correspondence" && isAuthenticated && hasPagePermission("tracker") && (
+        <Correspondence director={campaign?.is_director} authors={commentAuthors} userId={userId}
+          characters={campaign?.is_director ? characters : [...commentAuthors, ...companions]} />
+      )}
 
       {/* TRACKER VIEW */}
       {activeView === "tracker" && canManageAdmin && (

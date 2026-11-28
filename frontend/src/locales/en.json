@@ -34,6 +34,7 @@
     "removeError": "Could not remove the member."
   },
   "nav": {
+    "correspondence": "Correspondence",
     "language": "Language",
     "locations": "Locations and maps",
     "chronicle": "Adventure chronicle",
