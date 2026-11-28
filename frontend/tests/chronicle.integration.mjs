@@ -77,6 +77,20 @@ try {
   const secondFaction = await insert(director, "organizations", { name: "Orden de la costa" });
   const character = await insert(member, "characters", { name: "Niebla" });
   const otherCharacter = await insert(onlooker, "characters", { name: "Bruma" });
+  const award = { kind: "title", name: "Guardiana del faro", character_id: character.id, visibility: "recipient" };
+  assert.ok((await member.from("campaign_achievements").insert(award)).error);
+  const honor = await insert(director, "campaign_achievements", award);
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id", honor.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_achievements").select("id").eq("id", honor.id)).length, 0);
+  assert.equal(ok(await other.from("campaign_achievements").select("id").eq("id", honor.id)).length, 0);
+  assert.ok((await other.from("campaign_achievements").insert(award)).error);
+  ok(await director.from("campaign_achievements").update({ visibility: "campaign" }).eq("id", honor.id));
+  assert.equal(ok(await onlooker.from("campaign_achievements").select("id").eq("id", honor.id)).length, 1);
+  const groupAward = await insert(director, "campaign_achievements", { kind: "achievement", name: "Exploradores", group_id: group });
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id", groupAward.id)).length, 1);
+  assert.equal(ok(await onlooker.from("campaign_achievements").select("id").eq("id", groupAward.id)).length, 0);
+  ok(await director.from("campaign_achievements").delete().eq("id", honor.id));
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id", honor.id)).length, 0);
   const npc = await insert(director, "allies", { name: "Vigía", alignment: "neutral" });
   const secondNpc = await insert(director, "allies", { name: "Capitana" });
   const creatures = await Promise.all(["Hidra", "Grifo"].map((name) => insert(director, "creatures", { name })));
@@ -536,6 +550,10 @@ try {
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
 
   const encounter = ok(await director.from("encounters").insert({ title: "Batalla de prueba", session_id: session.id, experience: 50, rewards: "Tesoro reservado" }).select("id").single());
+  const encounterAward = await insert(director, "campaign_achievements", {
+    kind: "recognition", name: "Defensa del faro", character_id: character.id, encounter_id: encounter.id, quest_id: quest.id,
+  });
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id",encounterAward.id)).length,0);
   const step = (client, action, expected, loot = []) =>
     client.rpc("encounter_step", { target: encounter.id, action, expected, loot });
   await insert(director, "encounter_combatants", {
@@ -569,6 +587,7 @@ try {
   assert.equal(ok(await director.from("treasury_history").select("encounter_id").eq("encounter_id",encounter.id).single()).encounter_id, encounter.id);
   assert.ok((await step(director, "complete", 3, [deposit])).error);
   assert.equal(ok(await member.rpc("visible_encounters")).find(({ id }) => id === encounter.id).rewards,"Tesoro reservado");
+  assert.equal(ok(await member.from("campaign_achievements").select("id").eq("id",encounterAward.id)).length,1);
 
   const legacy = new URL(base);
   legacy.hash = "/resources";
