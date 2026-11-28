@@ -5,6 +5,7 @@ import { CommentAuthor } from "./CampaignComments";
 import { Choices, SelectRow } from "./ChronicleControls";
 
 const states = { active: "Activa", completed: "Completada", failed: "Fallida" };
+const groups = { active: "Activas", completed: "Completadas", failed: "Fallidas" };
 const priorities = { low: "Baja", normal: "Normal", high: "Alta" };
 const visibilityLabels = { shared: "Grupal", private: "Personal" };
 const labels = { participants: "Participantes", npc_ids: "PNJ", organization_ids: "Organizaciones", creature_ids: "Criaturas", place_ids: "Lugares" };
@@ -76,6 +77,7 @@ export function CollaborativeQuests({ data, director, authors, characters, entit
     participants: characters, npc_ids: entities.npc_id, organization_ids: entities.organization_id,
     creature_ids: entities.creature_id, place_ids: entities.place_id,
   };
+  const visibleGroups = Object.entries(groups).filter(([id]) => !status || status === id);
   return <section className="chronicle-flow">
     <div className="chronicle-actions">
       <SelectRow label="Estado oficial" rows={toRows(states)} value={status} onChange={setStatus} empty="Todos" />
@@ -83,34 +85,41 @@ export function CollaborativeQuests({ data, director, authors, characters, entit
     </div>
     {editing && <QuestEditor key={editing.id ?? "new"} entry={editing} authors={authors} director={director}
       choices={choices} sessions={data.sessions} mutation={mutation} onDone={() => setEditing(null)} />}
-    <ul className="chronicle-list">{data.quests.filter((row) => !status || row.status === status).map((row) => {
-      const editable = director || row.author_user_id === userId;
-      return <li key={row.id} className="chronicle-panel">
-        <h3>{row.title}</h3>
-        <p>{[row.author_character_name, row.author_account_name].filter(Boolean).join(" · ") || "Misión anterior"}
-          {" · "}{visibilityLabels[row.visibility]}{" · "}{priorities[row.priority]}</p>
-        <p>Estado oficial: {states[row.status]} · Propuesta: {states[row.proposed_status]}</p>
-        <p className="chronicle-pre">{row.description}</p>
-        {row.rewards && <p>Recompensas: {row.rewards}</p>}
-        {row.session_id && <button type="button" onClick={() => sessionState(row.session_id)}>
-          {data.sessions.find(({ id }) => id === row.session_id)?.title ?? "Sesión vinculada"}</button>}
-        {Object.entries(labels).map(([key, label]) => {
-          const names = choices[key].filter(({ id }) => row[key].includes(id)).map((item) => item.name ?? item.title);
-          return names.length ? <p key={key}>{label} · {names.join(", ")}</p> : null;
-        })}
-        {row.objectives.length > 0 && <ul className="chronicle-list">
-          {row.objectives.map((objective, index) => <li key={index}>
-            <label><input type="checkbox" checked={objective.done} disabled={!editable || mutation.busy}
-              onChange={(event) => {
-                const objectives = row.objectives.map((item, position) =>
-                  position === index ? { ...item, done: event.target.checked } : item);
-                mutation.run(() => campaignChronicle.save("chronicle_quests", { objectives }, row.id));
-              }} /> {objective.title}</label>
-          </li>)}
-        </ul>}
-        <VisibilityEditor kind="chronicle_quests" id={row.id} characters={director ? characters : null} />
-        {editable && <button type="button" onClick={() => setEditing(row)}>Editar misión</button>}
-      </li>;
-    })}</ul>
+    <div className="quest-groups">{visibleGroups.map(([id, label]) => {
+      const quests = data.quests.filter((row) => row.status === id);
+      return <section key={id} className="quest-group" aria-labelledby={`quest-group-${id}`}>
+        <h3 id={`quest-group-${id}`}>{label} <span>{quests.length}</span></h3>
+        {quests.length === 0 && <p>No hay misiones en este estado.</p>}
+        <ul className="chronicle-list">{quests.map((row) => {
+          const editable = director || row.author_user_id === userId;
+          return <li key={row.id} className="chronicle-panel">
+            <h4>{row.title}</h4>
+            <p>{[row.author_character_name, row.author_account_name].filter(Boolean).join(" · ") || "Misión anterior"}
+              {" · "}{visibilityLabels[row.visibility]}{" · "}{priorities[row.priority]}</p>
+            <p>Estado oficial: {states[row.status]} · Propuesta: {states[row.proposed_status]}</p>
+            <p className="chronicle-pre">{row.description}</p>
+            {row.rewards && <p>Recompensas: {row.rewards}</p>}
+            {row.session_id && <button type="button" onClick={() => sessionState(row.session_id)}>
+              {data.sessions.find(({ id }) => id === row.session_id)?.title ?? "Sesión vinculada"}</button>}
+            {Object.entries(labels).map(([key, label]) => {
+              const names = choices[key].filter(({ id }) => row[key].includes(id)).map((item) => item.name ?? item.title);
+              return names.length ? <p key={key}>{label} · {names.join(", ")}</p> : null;
+            })}
+            {row.objectives.length > 0 && <ul className="chronicle-list">
+              {row.objectives.map((objective, index) => <li key={index}>
+                <label><input type="checkbox" checked={objective.done} disabled={!editable || mutation.busy}
+                  onChange={(event) => {
+                    const objectives = row.objectives.map((item, position) =>
+                      position === index ? { ...item, done: event.target.checked } : item);
+                    mutation.run(() => campaignChronicle.save("chronicle_quests", { objectives }, row.id));
+                  }} /> {objective.title}</label>
+              </li>)}
+            </ul>}
+            <VisibilityEditor kind="chronicle_quests" id={row.id} characters={director ? characters : null} />
+            {editable && <button type="button" onClick={() => setEditing(row)}>Editar misión</button>}
+          </li>;
+        })}</ul>
+      </section>;
+    })}</div>
   </section>;
 }

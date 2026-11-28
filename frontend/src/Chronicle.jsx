@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { PageHeader } from "./CampaignShell";
+import { useEffect, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { CollaborativeQuests } from "./CollaborativeQuests";
 import DOMPurify from "dompurify";
 import { campaignChronicle, groupInventory, treasury } from "./campaign";
@@ -169,11 +170,11 @@ function Closure({ session, data, entities, characters, mutation, onDone }) {
   </div>;
 }
 
-function Gallery({ data, campaignId, director, mutation }) {
+function Gallery({ data, campaignId, director, mutation, campaignCover }) {
   const cover = data.images.find((image) => image.cover);
   return <>
-    {cover?.url && <figure className="chronicle-cover"><img src={cover.url} alt={cover.caption} />
-      {cover.caption && <figcaption>{cover.caption}</figcaption>}</figure>}
+    {(cover?.url || campaignCover) && <figure className="chronicle-cover"><img src={cover?.url || campaignCover} alt={cover?.caption ?? ""} />
+      {cover?.caption && <figcaption>{cover.caption}</figcaption>}</figure>}
     <section className="chronicle-flow">
       {director && <form className="form" onSubmit={async (event) => {
         event.preventDefault();
@@ -202,7 +203,7 @@ function Gallery({ data, campaignId, director, mutation }) {
 }
 
 export function Chronicle({ campaignId, director, characters, organizations, allies, creatures, openEntity,
-  onClose, legacy, authors, userId }) {
+  onClose, legacy, authors, userId, requestedDiary, campaignCover }) {
   const { t } = useTranslation();
   const [section, setSection] = useState("sessions");
   const load = useCallback(async () => {
@@ -224,6 +225,16 @@ export function Chronicle({ campaignId, director, characters, organizations, all
   const [closing, setClosing] = useState(null);
   const [chapterEdit, setChapterEdit] = useState(null);
   const [current, setCurrent] = useState(null);
+  useEffect(() => {
+    if (!requestedDiary) return;
+    setSearch("");
+    setSection("archive");
+  }, [requestedDiary]);
+  useEffect(() => {
+    if (section !== "archive" || !requestedDiary || !data) return;
+    const frame = requestAnimationFrame(() => document.getElementById(`diary-entry-${requestedDiary.id}`)?.scrollIntoView({ block: "start" }));
+    return () => cancelAnimationFrame(frame);
+  }, [section, requestedDiary, data]);
   if (error) return <article className="card"><p role="alert">{error}</p><button type="button" onClick={refresh}>Reintentar</button></article>;
   if (!data) return <article className="card"><p role="status">Cargando crónica…</p></article>;
   const entities = { npc_id: allies, organization_id: organizations, creature_id: creatures, place_id: data.places };
@@ -232,8 +243,8 @@ export function Chronicle({ campaignId, director, characters, organizations, all
       .some((text) => text.toLowerCase().includes(search.trim().toLowerCase())));
   const session = sessions.find(({ id }) => id === current) ?? sessions[0];
 
-  return <article className="card chronicle">
-    <h2>{t("nav.chronicle")}</h2>
+  return <article className="chronicle">
+    <PageHeader title={t("nav.chronicle")} />
     <nav className="section-nav" aria-label={t("nav.chronicle")}>
       {["sessions", "quests", "gallery", "archive"].map((view) => (
         <button key={view} type="button" aria-pressed={section === view}
@@ -244,7 +255,7 @@ export function Chronicle({ campaignId, director, characters, organizations, all
       ))}
     </nav>
     {mutation.error && <p className="error" role="alert">{mutation.error}</p>}
-    {section === "gallery" && <Gallery data={data} campaignId={campaignId} director={director} mutation={mutation} />}
+    {section === "gallery" && <Gallery campaignCover={campaignCover} data={data} campaignId={campaignId} director={director} mutation={mutation} />}
     {section === "quests" && <CollaborativeQuests data={data} director={director} mutation={mutation} authors={authors} userId={userId}
       characters={characters} entities={entities} sessionState={(id) => {
       setSection("sessions"); setCurrent(id); setChapter(""); setStatus(""); setSearch("");
@@ -285,7 +296,7 @@ export function Chronicle({ campaignId, director, characters, organizations, all
       {session ? <>
         <SelectRow label="Sesión" rows={sessions.map((row) => ({ ...row, title: `${row.played_on} · ${row.title}` }))}
           value={session.id} onChange={(id) => { setCurrent(id); setClosing(null); }} />
-        <section className="chronicle-panel" id={`session-${session.id}`}>
+        <section className="chronicle-panel chronicle-reading" id={`session-${session.id}`}>
           <h3>{session.title}</h3>
           <p><time dateTime={session.played_on}>{new Date(`${session.played_on}T00:00:00`).toLocaleDateString()}</time> · {states[session.status]}
             {session.chapter_id && <> · {data.chapters.find(({ id }) => id === session.chapter_id)?.title}</>}

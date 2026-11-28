@@ -59,7 +59,7 @@ export function CollaborativeDiary({ entries, search, sessions, authors, directo
       }} />}
     <ul className="chronicle-list">{filtered.map((row) => {
       const editable = director || row.author_user_id === userId;
-      return <li key={row.id} className="chronicle-panel">
+      return <li key={row.id} id={`diary-entry-${row.id}`} className="chronicle-panel chronicle-reading">
         <h3>{row.title}</h3>
         <p>{[row.author_character_name, row.author_account_name].filter(Boolean).join(" · ") || "Entrada anterior"}
           {row.visibility === "private" && " · Privada"}
