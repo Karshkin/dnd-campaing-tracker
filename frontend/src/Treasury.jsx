@@ -26,7 +26,7 @@ export function ItemDetails({ details }) {
   </span>;
 }
 
-export function MovementEditor({ groupId, characters, items, busy, onAdd, closure = false }) {
+export function MovementEditor({ groupId, characters, items, busy, onAdd, closure = false, depositOnly = false }) {
   const [operation, setOperation] = useState(closure ? "distribution" : "deposit");
   const [currency, setCurrency] = useState(closure ? "gp" : "");
   const [character, setCharacter] = useState("");
@@ -37,7 +37,7 @@ export function MovementEditor({ groupId, characters, items, busy, onAdd, closur
   const transfer = ["to_group", "to_character", "distribution"].includes(operation);
   const source = operation === "to_group" ? personal.data?.[0] ?? [] : items;
   const coinOptions = asRows(denominations);
-  const operationOptions = closure
+  const operationOptions = depositOnly ? { deposit: operations.deposit } : closure
     ? { distribution: operations.distribution, to_character: operations.to_character }
     : Object.fromEntries(Object.entries(operations).filter(([key]) => key !== "correction"));
 

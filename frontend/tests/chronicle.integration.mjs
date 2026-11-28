@@ -209,6 +209,9 @@ try {
   ok(await director.from("organizations").update({ image_path: factionArtwork }).eq("id", faction.id));
   assert.ok(ok(await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).signedUrl);
   ok(await visibility(director, "organizations", faction.id, "hidden"));
+  const updates = (client) => client.from("campaign_activity").select("id").eq("entity_kind", "organizations").eq("entity_id", String(faction.id));
+  assert.ok(ok(await updates(director)).length > 0);
+  assert.deepEqual(ok(await updates(member)), []);
   assert.deepEqual(ok(await member.from("organizations").select("id").eq("id", faction.id)), []);
   assert.deepEqual(await score(), []);
   assert.deepEqual(ok(await member.from("chronicle_links").select("id").eq("organization_id", faction.id)), []);
@@ -248,6 +251,10 @@ try {
   }
 
   await openAs(dm);
+  await page.getByRole("button", { name: "Inicio", exact: true }).click();
+  await page.getByRole("heading", { name: "Panel del director" }).waitFor();
+  await page.getByRole("heading", { name: "Actividad reciente", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   const sidebar = page.getByRole("navigation", { name: "Menú de campaña" });
   await page.getByRole("button", { name: "Contraer navegación" }).click();
   assert.ok(await sidebar.getByRole("button", { name: "Inventario grupal" }).isVisible());
@@ -442,6 +449,41 @@ try {
   await inventory.getByRole("button", { name: "Registrar movimiento", exact: true }).click();
   await playerPage.waitForFunction(() => document.querySelector(".treasury-wallet")?.textContent.includes("Plata2"));
 
+  const encounter = ok(await director.from("encounters").insert({ title: "Batalla de prueba", session_id: session.id, experience: 50, rewards: "Tesoro reservado" }).select("id").single());
+  const step = (client, action, expected, loot = []) =>
+    client.rpc("encounter_step", { target: encounter.id, action, expected, loot });
+  await insert(director, "encounter_combatants", {
+    encounter_id: encounter.id, name: "Guardian secreto", creature_id: null, maximum_hp: 30, hp: 30, initiative: 18, player_visible: false, notes: "reservadas",
+  });
+  const publicUnit = await insert(director, "encounter_combatants", {
+    encounter_id: encounter.id, name: character.name, character_id: character.id, maximum_hp: 12, hp: 12, initiative: 13,
+  });
+  assert.deepEqual(ok(await member.rpc("visible_encounter_turns", { target: encounter.id })), []);
+  assert.ok((await step(member, "start", 0)).error);
+  ok(await step(director, "start", 0));
+  const encounterList = ok(await member.rpc("visible_encounters"));
+  assert.equal(encounterList.find(({ id }) => id === encounter.id).rewards,null);
+  assert.equal(ok(await member.from("encounters").select("id").eq("id",encounter.id)).length,0);
+  assert.deepEqual(ok(await outside.rpc("visible_encounters")),[]);
+  const turns = ok(await member.rpc("visible_encounter_turns", { target: encounter.id }));
+  assert.deepEqual(turns.map(({ id, name }) => [id,name]), [[publicUnit.id,character.name]]);
+  assert.ok(!Object.hasOwn(turns[0],"hp"));
+  assert.deepEqual(ok(await member.from("encounter_combatants").select()), []);
+  assert.deepEqual(ok(await outside.rpc("visible_encounter_turns", { target: encounter.id })), []);
+  const parallelTurns = await Promise.all([step(director,"next",1),step(director,"next",1)]);
+  assert.equal(parallelTurns.filter(({ error }) => !error).length,1);
+  assert.ok(ok(await member.rpc("visible_encounter_turns", { target: encounter.id }))[0].current);
+  ok(await step(director,"next",2));
+  assert.equal(ok(await director.from("encounters").select("round").eq("id",encounter.id).single()).round,2);
+  const currentCoins = await wallet(member, "group_id", group);
+  assert.ok((await step(director, "complete", 3, [deposit, { ...deposit, quantity: -1 }])).error);
+  assert.equal(await wallet(member, "group_id", group), currentCoins);
+  ok(await step(director, "complete", 3, [deposit]));
+  assert.equal(await wallet(member, "group_id", group), currentCoins + deposit.quantity);
+  assert.equal(ok(await director.from("treasury_history").select("encounter_id").eq("encounter_id",encounter.id).single()).encounter_id, encounter.id);
+  assert.ok((await step(director, "complete", 3, [deposit])).error);
+  assert.equal(ok(await member.rpc("visible_encounters")).find(({ id }) => id === encounter.id).rewards,"Tesoro reservado");
+
   const legacy = new URL(base);
   legacy.hash = "/resources";
   await playerPage.goto(legacy.href);
@@ -472,11 +514,11 @@ try {
   assert.equal(ok(await member.from("inventory_groups").select("name").eq("id", group).single()).name, "Exploradores del faro");
   const impact = ok(await manageGroup(director, "impact", group));
   assert.equal(impact.members, 1);
-  assert.equal(impact.coins.gp, 4);
+  assert.equal(impact.coins.gp, currentCoins + deposit.quantity);
   assert.ok(impact.history > 0);
   ok(await manageGroup(director, "archive", group));
   assert.ok((await movement(member, deposit)).error);
-  assert.equal(await wallet(member, "group_id", group), 4);
+  assert.equal(await wallet(member, "group_id", group), currentCoins + deposit.quantity);
   assert.equal(ok(await manageGroup(director, "impact", group)).history, impact.history);
 
   console.log("Passed chronicle, reputation, atomic treasury, access controls and browser checks.");

@@ -1,15 +1,15 @@
 import { useEffect, useId, useState } from "react";
-import { BookOpen, Boxes, Castle, CircleUser, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Users, X } from "lucide-react";
+import { BookOpen, Boxes, Castle, CircleUser, House, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Swords, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const sections = [
-  ["campaign", [["chronicle", "chronicle", "tracker", BookOpen]]],
+  ["campaign", [["home", "home", "tracker", House], ["chronicle", "chronicle", "tracker", BookOpen]]],
   ["world", [
     ["characters", "characters", "characters", Users], ["npcs", "npcs", "npcs", CircleUser],
     ["organizations", "organizations", "organizations", Castle], ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes], ["encounters", "encounters", "tracker", Swords], ["resources", "tracker", Boxes]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 

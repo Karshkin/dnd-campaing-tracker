@@ -34,6 +34,8 @@
     "removeError": "No se pudo quitar el miembro."
   },
   "nav": {
+    "encounters": "Encuentros",
+    "home": "Inicio",
     "language": "Idioma",
     "locations": "Localizaciones y mapas",
     "chronicle": "Crónica de aventuras",
