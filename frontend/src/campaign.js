@@ -554,3 +554,12 @@ export const treasury = {
     return campaignChronicle.action("treasury", { movements, session_id: sessionId || null, request_id: requestId });
   },
 };
+
+export const campaignVisibility = {
+  get(kind, id) {
+    return value(supabase.rpc("manage_visibility", { entity_kind: kind, target: String(id) }));
+  },
+  save(kind, id, visibility, recipients) {
+    return value(supabase.rpc("manage_visibility", { entity_kind: kind, target: String(id), visibility, recipients }));
+  },
+};

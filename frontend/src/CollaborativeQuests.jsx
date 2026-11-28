@@ -1,3 +1,4 @@
+import { VisibilityEditor } from "./VisibilityEditor";
 import { useState } from "react";
 import { campaignChronicle } from "./campaign";
 import { CommentAuthor } from "./CampaignComments";
@@ -114,6 +115,7 @@ export function CollaborativeQuests({ data, director, authors, characters, entit
                   }} /> {objective.title}</label>
               </li>)}
             </ul>}
+            <VisibilityEditor kind="chronicle_quests" id={row.id} characters={director ? characters : null} />
             {editable && <button type="button" onClick={() => setEditing(row)}>Editar misión</button>}
           </li>;
         })}</ul>
