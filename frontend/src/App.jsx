@@ -1,3 +1,6 @@
+import { HarptosCalendar } from "./HarptosCalendar";
+import { Encounters } from "./Encounters";
+import { Dashboard } from "./Dashboard";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { AtlasMap } from "./AtlasMap";
 import { AtlasDescription } from "./AtlasDescription";
@@ -77,7 +80,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "calendar", "encounters", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -360,6 +363,9 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
   useEffect(() => {
     const requiredPermissions = {
       tracker: ["tracker", "view"],
+      home: ["tracker", "view"],
+      calendar: ["tracker", "view"],
+      encounters: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       characters: ["characters", "view"],
@@ -1071,6 +1077,15 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
           </article>
         </section>
       ) : null}
+
+      {activeView === "home" && isAuthenticated && hasPagePermission("tracker") && (
+        <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} views={views} />
+      )}
+
+      {activeView === "calendar" && isAuthenticated && hasPagePermission("tracker") &&
+        <HarptosCalendar director={campaign?.is_director} characters={characters} />}
+      {activeView === "encounters" && isAuthenticated && hasPagePermission("tracker") &&
+        <Encounters director={campaign?.is_director} characters={characters} creatures={creatures} npcs={allies} />}
 
       {/* Campaign atlas */}
       {activeView === "tracker" && canManageAdmin && manageMapsOpen && (
