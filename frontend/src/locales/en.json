@@ -73,6 +73,23 @@
     "all": "Select all attendees",
     "empty": "No matches"
   },
+  "shell": {
+    "search": "Search the campaign",
+    "noResults": "No results",
+    "notices": "Updates",
+    "noNotices": "There are no visible updates yet.",
+    "account": "Account and preferences",
+    "atlas": "Campaign atlas",
+    "map": "Map",
+    "addLocation": "Add location",
+    "discovered": "Discovered locations",
+    "noPlaces": "No locations on this map yet.",
+    "mapControls": "Atlas controls",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen"
+  },
   "common": {
     "loading": "Loading…",
     "title": "Title",
