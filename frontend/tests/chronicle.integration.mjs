@@ -219,6 +219,9 @@ try {
   ok(await director.from("organizations").update({ image_path: factionArtwork }).eq("id", faction.id));
   assert.ok(ok(await member.storage.from("campaign-files").createSignedUrl(factionArtwork, 60)).signedUrl);
   ok(await visibility(director, "organizations", faction.id, "hidden"));
+  const updates = (client) => client.from("campaign_activity").select("id").eq("entity_kind", "organizations").eq("entity_id", String(faction.id));
+  assert.ok(ok(await updates(director)).length > 0);
+  assert.deepEqual(ok(await updates(member)), []);
   assert.deepEqual(ok(await member.from("organizations").select("id").eq("id", faction.id)), []);
   assert.deepEqual(await score(), []);
   assert.deepEqual(ok(await member.from("chronicle_links").select("id").eq("organization_id", faction.id)), []);
@@ -258,6 +261,10 @@ try {
   }
 
   await openAs(dm);
+  await page.getByRole("button", { name: "Inicio", exact: true }).click();
+  await page.getByRole("heading", { name: "Panel del director" }).waitFor();
+  await page.getByRole("heading", { name: "Actividad reciente", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Crónica de aventuras", exact: true }).click();
   const sidebar = page.getByRole("navigation", { name: "Menú de campaña" });
   await page.getByRole("button", { name: "Contraer navegación" }).click();
   assert.ok(await sidebar.getByRole("button", { name: "Inventario grupal" }).isVisible());

@@ -34,6 +34,7 @@
     "removeError": "No s’ha pogut treure el membre."
   },
   "nav": {
+    "home": "Inici",
     "language": "Idioma",
     "locations": "Localitzacions i mapes",
     "chronicle": "Crònica d’aventures",
