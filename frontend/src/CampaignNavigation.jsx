@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { BookOpen, Boxes, Castle, CircleUser, House, Mail, Map, Menu, PanelLeftClose, PanelLeftOpen, Shield, Skull, Users, X } from "lucide-react";
+import { BookOpen, Boxes, Castle, CircleUser, House, Mail, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Shield, Skull, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const sections = [
@@ -9,7 +9,7 @@ const sections = [
     ["organizations", "organizations", "organizations", Castle], ["tracker", "locations", "tracker", Map],
     ["bestiary", "bestiary", "bestiary", Skull],
   ]],
-  ["tools", [["inventory", "inventory", "tracker", Boxes], ["correspondence", "correspondence", "tracker", Mail]]],
+  ["tools", [["inventory", "inventory", "tracker", Boxes], ["correspondence", "correspondence", "tracker", Mail], ["investigation", "investigation", "tracker", Search]]],
   ["administration", [["admin", "admin", "admin", Shield, "admin"]]],
 ];
 

@@ -1,4 +1,5 @@
 import { Dashboard } from "./Dashboard";
+import { Investigation } from "./Investigation";
 import { Correspondence } from "./Correspondence";
 import { VisibilityEditor } from "./VisibilityEditor";
 import { AtlasMap } from "./AtlasMap";
@@ -79,7 +80,7 @@ function hasLevel(actual, required) {
 }
 
 // ===== MAIN APP =====
-const views = ["home", "correspondence", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
+const views = ["home", "correspondence", "investigation", "tracker", "chronicle", "inventory", "characters", "bestiary", "organizations", "npcs", "admin", "login", "register"];
 const parseView = () => {
   const view = window.location.hash.replace(/^#\/?/, "");
   return view === "resources" ? "inventory" : views.includes(view) ? view : "tracker";
@@ -364,6 +365,7 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
       tracker: ["tracker", "view"],
       home: ["tracker", "view"],
       correspondence: ["tracker", "view"],
+      investigation: ["tracker", "view"],
       chronicle: ["tracker", "view"],
       inventory: ["tracker", "view"],
       characters: ["characters", "view"],
@@ -1078,6 +1080,10 @@ function Campaign({ session, campaign, campaigns = [], images = {}, isSuperadmin
 
       {activeView === "home" && isAuthenticated && hasPagePermission("tracker") && (
         <Dashboard director={campaign?.is_director} characters={commentAuthors} navigate={navigate} views={views} />
+      )}
+
+      {activeView === "investigation" && campaign && hasPagePermission("tracker") && (
+        <Investigation director={campaign.is_director} authors={commentAuthors} characters={characters} userId={userId} />
       )}
 
       {activeView === "correspondence" && isAuthenticated && hasPagePermission("tracker") && (
